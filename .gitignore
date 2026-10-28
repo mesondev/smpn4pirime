@@ -1,0 +1,19 @@
+.env
+.env.*
+!.env.example
+config/
+vendor/
+node_modules/
+*.log
+
+# Local configuration and private data
+/config/
+/uploads/
+/outputs/
+/.env
+/.env.*
+
+# Exclude sensitive or locally configured files
+/database.sql
+/modules/config.php
+/setup_admin.php
