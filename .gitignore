@@ -10,10 +10,17 @@ node_modules/
 /config/
 /uploads/
 /outputs/
+/storage/logs/*.log
 /.env
 /.env.*
+!/.env.example
+!/config/
+/config/*
+!/config/database.example.php
 
 # Exclude sensitive or locally configured files
 /database.sql
 /modules/config.php
 /setup_admin.php
+
+database/backups/

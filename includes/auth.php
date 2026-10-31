@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($failures >= 5) {
             $_SESSION['login_failures'] = 0;
             $_SESSION['login_locked_until'] = time() + 300;
+            app_log('warning', 'Login temporarily locked after repeated failures');
             $error = 'Terlalu banyak percobaan login. Coba lagi dalam 5 menit.';
         } else {
             $_SESSION['login_failures'] = $failures;

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../config/database.php';
@@ -6,13 +7,19 @@ require_once __DIR__ . '/../config/database.php';
 $type = (string)($_GET['type'] ?? '');
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
 $tables = ['berita' => ['table' => 'berita_sekolah'], 'galeri' => ['table' => 'galeri_sekolah']];
-if ($id < 1 || !isset($tables[$type])) { http_response_code(404); exit; }
+if ($id < 1 || !isset($tables[$type])) {
+    http_response_code(404);
+    exit;
+}
 
 try {
     $stmt = $pdo->prepare('SELECT gambar_url,status FROM `' . $tables[$type]['table'] . '` WHERE id=? LIMIT 1');
     $stmt->execute([$id]);
     $record = $stmt->fetch();
-} catch (PDOException $e) { http_response_code(404); exit; }
+} catch (PDOException $e) {
+    http_response_code(404);
+    exit;
+}
 
 $isStaff = false;
 if (is_logged_in()) {
@@ -29,11 +36,17 @@ if (!$record || (!$isStaff && !$isPublic) || !preg_match('~^uploads/portal/([a-f
 
 $root = realpath(__DIR__ . '/../uploads/portal');
 $path = $root ? realpath($root . DIRECTORY_SEPARATOR . $match[1]) : false;
-if (!$root || !$path || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path)) { http_response_code(404); exit; }
+if (!$root || !$path || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path)) {
+    http_response_code(404);
+    exit;
+}
 $finfo = new finfo(FILEINFO_MIME_TYPE);
 $mime = $finfo->file($path);
 $image = @getimagesize($path);
-if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true) || !$image || ($image['mime'] ?? '') !== $mime) { http_response_code(404); exit; }
+if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true) || !$image || ($image['mime'] ?? '') !== $mime) {
+    http_response_code(404);
+    exit;
+}
 
 header('Content-Type: ' . $mime);
 header('Content-Length: ' . (string)filesize($path));

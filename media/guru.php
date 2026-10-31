@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/helpers.php';
@@ -32,7 +33,7 @@ if (is_logged_in()) {
     $actorStmt = $pdo->prepare('SELECT role,aktif FROM users WHERE id=?');
     $actorStmt->execute([(int)$_SESSION['user_id']]);
     $actor = $actorStmt->fetch();
-    $isStaff = $actor && (int)$actor['aktif'] === 1 && in_array($actor['role'], ['admin','operator'], true);
+    $isStaff = $actor && (int)$actor['aktif'] === 1 && in_array($actor['role'], ['admin', 'operator'], true);
 }
 $isPublic = ($teacher['status'] ?? '') === 'Aktif' && $publicColumn && (int)($teacher['tampil_publik'] ?? 0) === 1;
 if (!$isStaff && !$isPublic) {

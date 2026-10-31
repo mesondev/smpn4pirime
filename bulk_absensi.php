@@ -67,17 +67,40 @@ require __DIR__ . '/includes/header.php';
         <p>Catat kehadiran satu kelas untuk satu tanggal. Catatan yang sudah ada tidak akan ditimpa.</p>
     </div><a class="btn btn-outline-secondary" href="index.php?module=absensi">Kembali ke Absensi</a>
 </div>
-<?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
-<?php if ($notice): ?><div class="alert alert-success"><?= e($notice) ?></div><?php endif; ?>
+<?php if ($error): ?>
+    <div class="alert alert-danger">
+        <?= e($error) ?>
+    </div>
+<?php endif; ?>
+<?php if ($notice): ?>
+    <div class="alert alert-success">
+        <?= e($notice) ?></div>
+<?php endif; ?>
 <div class="card p-3 p-md-4">
     <form method="get" class="row g-3 align-items-end mb-4 no-print">
-        <div class="col-md-5"><label class="form-label" for="kelas_id">Kelas</label><select class="form-select" id="kelas_id" name="kelas_id" required>
-                <option value="">-- Pilih Kelas --</option><?php foreach ($classes as $id => $label): ?><option value="<?= e($id) ?>" <?= $classId === (int)$id ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
-            </select></div>
-        <div class="col-md-3"><label class="form-label" for="tanggal">Tanggal</label><input class="form-control" id="tanggal" type="date" name="tanggal" value="<?= e($date) ?>" required></div>
-        <div class="col-auto"><button class="btn btn-outline-primary">Tampilkan Siswa</button></div>
+        <div class="col-md-5"><label class="form-label" for="kelas_id">Kelas</label>
+            <select class="form-select" id="kelas_id" name="kelas_id" required>
+                <option value="">-- Pilih Kelas --</option>
+                <?php foreach ($classes as $id => $label): ?>
+                    <option value="<?= e($id) ?>"
+                        <?= $classId === (int)$id ? ' selected' : '' ?>><?= e($label) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label" for="tanggal">Tanggal</label>
+            <input class="form-control" id="tanggal" type="date" name="tanggal" value="<?= e($date) ?>" required>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary">Tampilkan Siswa</button>
+        </div>
     </form>
-    <?php if ($students): ?><form method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="kelas_id" value="<?= $classId ?>"><input type="hidden" name="tanggal" value="<?= e($date) ?>">
+    <?php if ($students): ?>
+        <form method="post">
+            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="kelas_id" value="<?= $classId ?>">
+            <input type="hidden" name="tanggal" value="<?= e($date) ?>">
             <div class="table-responsive">
                 <table class="table table-striped align-middle">
                     <thead>
@@ -93,11 +116,19 @@ require __DIR__ . '/includes/header.php';
                                 <td><?= e($student['nis']) ?></td>
                                 <td><?= e($student['nama']) ?></td>
                                 <td><select class="form-select" name="status[<?= (int)$student['id'] ?>]" required>
-                                        <option value="">-- Pilih --</option><?php foreach (['Hadir', 'Izin', 'Sakit', 'Alpa'] as $status): ?><option value="<?= e($status) ?>" <?= $oldStatus === $status ? ' selected' : '' ?>><?= e($status) ?></option><?php endforeach; ?>
+                                        <option value="">-- Pilih --</option>
+                                        <?php foreach (['Hadir', 'Izin', 'Sakit', 'Alpa'] as $status): ?>
+                                            <option value="<?= e($status) ?>" <?= $oldStatus === $status ? ' selected' : '' ?>>
+                                                <?= e($status) ?></option><?php endforeach; ?>
                                     </select></td>
-                            </tr><?php endforeach; ?></tbody>
+                            </tr><?php endforeach; ?>
+                    </tbody>
                 </table>
             </div><button class="btn btn-primary">Simpan Absensi Kelas</button>
-        </form><?php elseif ($classId > 0): ?><div class="empty-state">Tidak ada siswa aktif di kelas ini. Pastikan kelas dan data siswa sudah diisi.</div><?php else: ?><div class="empty-state">Pilih kelas dan tanggal untuk menampilkan daftar siswa.</div><?php endif; ?>
+        </form>
+    <?php elseif ($classId > 0): ?>
+        <div class="empty-state">Tidak ada siswa aktif di kelas ini. Pastikan kelas dan data siswa sudah diisi.</div>
+    <?php else: ?><div class="empty-state">Pilih kelas dan tanggal untuk menampilkan daftar siswa.</div>
+    <?php endif; ?>
 </div>
 <?php require __DIR__ . '/includes/footer.php'; ?>

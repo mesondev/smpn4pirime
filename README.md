@@ -6,9 +6,12 @@ Sistem Informasi Manajemen Sekolah berbasis PHP dan MySQL/MariaDB. SIMS menghubu
 
 - Login terpadu dengan hak akses sesuai peran.
 - Dashboard responsif untuk Super Admin, Kepala Sekolah, Operator, Guru, dan Siswa.
+- Dashboard Guru berisi jadwal harian, pemantauan absensi dan pengumpulan; dashboard Kepala Sekolah menyajikan rekap akademik, pembelajaran, kehadiran, dan prestasi.
 - Manajemen data siswa, guru, kelas, mata pelajaran, tahun ajaran, jadwal, absensi, dan nilai.
 - Manajemen akun, tautan akun ke profil guru/siswa, foto profil, status akun, dan reset kata sandi.
-- Materi dan tugas pembelajaran, pengumpulan jawaban teks, serta penilaian guru.
+- Materi dan tugas pembelajaran dengan lampiran privat, pengumpulan jawaban teks/file, serta penilaian guru.
+- Inbox notifikasi per akun dengan pencarian, status baca, dan arsip.
+- Pencatatan prestasi siswa dan alur rencana ajar guru.
 - Kontrol Super Admin untuk log aktivitas dan pemantauan status materi/tugas.
 - Laporan siswa, guru, distribusi kelas, nilai, jadwal, absensi, tugas, dan pengumpulan; tersedia cetak dan ekspor CSV.
 - Website publik berisi profil sekolah, berita, pengumuman, agenda, galeri, PPDB, kontak, dan direktori guru.
@@ -27,21 +30,20 @@ Sistem Informasi Manajemen Sekolah berbasis PHP dan MySQL/MariaDB. SIMS menghubu
 ## Teknologi dan persyaratan
 
 - PHP 8.1 atau lebih baru
+- Ekstensi PHP `pdo_mysql`, `mbstring`, dan `fileinfo` aktif
 - MySQL atau MariaDB
 - Apache (XAMPP disarankan untuk pengembangan lokal)
 - Browser modern
+
+> Impor berkas XLS/XLSX memerlukan paket PhpSpreadsheet dan ekstensi PHP `zip`. Impor CSV tetap tersedia tanpa dependensi tersebut.
 
 ## Instalasi lokal dengan XAMPP
 
 1. Salin folder proyek ke `C:\xampp\htdocs\sims_smpn4`.
 2. Jalankan Apache dan MySQL melalui XAMPP Control Panel.
 3. Buat atau impor database `sims_db` dengan menjalankan `database.sql` melalui phpMyAdmin.
-4. Pilih database `sims_db`, lalu jalankan migrasi berikut satu per satu:
-   - `database/migrations/2026_10_27_guru_profile_fields.sql`
-   - `database/migrations/2026_10_29_public_portal.sql`
-   - `database/migrations/2026_10_29_user_roles_profiles.sql`
-   - `database/migrations/2026_10_29_learning_materials_tasks.sql`
-5. Periksa konfigurasi koneksi di `config/database.php`. Nilai bawaan ditujukan untuk XAMPP lokal (`127.0.0.1`, database `sims_db`, pengguna `root`, password kosong).
+4. Salin `config/database.example.php` menjadi `config/database.php` jika konfigurasi lokal belum ada. Untuk lokal, nilai bawaan ditujukan bagi XAMPP (`127.0.0.1`, database `sims_db`, pengguna `root`, password kosong). Server produksi harus mengatur `SIMS_APP_ENV=production` dan variabel database pada environment PHP. Lihat `.env.example` dan `docs/operations.md`; file contoh bukan file konfigurasi yang dimuat otomatis.
+5. Periksa backup database, lalu jalankan `php database/migrate.php` dari PowerShell di folder proyek. Runner hanya untuk CLI, mencatat checksum/status migrasi, dan menolak database yang bukan `sims_db`.
 6. Buka `http://localhost/sims_smpn4/setup_admin.php` dan buat akun Super Admin dengan password kuat (minimal 10 karakter).
 7. Setelah akun dibuat, hapus atau nonaktifkan `setup_admin.php` dari server.
 8. Buka `http://localhost/sims_smpn4/` untuk dashboard internal atau `http://localhost/sims_smpn4/public/` untuk website publik.
@@ -61,12 +63,14 @@ Sistem Informasi Manajemen Sekolah berbasis PHP dan MySQL/MariaDB. SIMS menghubu
 - `config/` — konfigurasi koneksi database.
 - `database.sql`, `database/migrations/` — skema awal dan perubahan database bertahap.
 - `uploads/` — file profil, portal, guru, dan materi; akses file privat dilayani melalui pemeriksaan aplikasi.
+- `docs/` — panduan peran, backup/pemulihan, migrasi, dan penerapan.
+- `storage/logs/` — log harian lokal; untuk produksi arahkan `SIMS_LOG_DIR` ke luar web root.
 
 ## Catatan keamanan dan batasan
 
 - Ganti konfigurasi database bawaan sebelum memasang aplikasi di server publik. Jangan memakai akun database `root` di produksi.
 - Gunakan HTTPS, password unik yang kuat, akses database minimum, dan backup rutin untuk deployment online.
 - Jangan mengunggah data siswa, password, token, atau file backup ke repositori Git.
-- Jawaban tugas saat ini berupa teks; lampiran jawaban siswa belum tersedia.
-- Pengaturan izin per modul, alur persetujuan konten, backup/pemulihan dari dashboard, dan riwayat perpindahan kelas masih dapat dikembangkan lebih lanjut.
+- Lampiran tugas dan materi disimpan privat di `uploads/` dan diunduh melalui pemeriksaan izin aplikasi; format yang didukung dibatasi dan ukuran maksimal 10 MB per berkas.
+- Izin per modul yang dapat dikonfigurasi, riwayat revisi konten, backup/pemulihan dari dashboard, dan riwayat perpindahan kelas masih dapat dikembangkan lebih lanjut.
 - Uji semua peran, laporan, unggahan, dan pemulihan backup pada lingkungan pengujian sebelum aplikasi digunakan secara resmi.

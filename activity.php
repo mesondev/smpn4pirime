@@ -84,21 +84,58 @@ require __DIR__ . '/includes/header.php';
         <p>Riwayat tindakan akun dan perubahan penting. Informasi autentikasi rahasia tidak ditampilkan.</p>
     </div><a class="btn btn-outline-success no-print" href="activity.php?<?= e(http_build_query(array_merge($filters, ['export' => 'csv']))) ?>"><i class="bi bi-download me-1"></i>Ekspor CSV</a>
 </div>
-<?php if ($error): ?><div class="alert alert-warning"><?= e($error) ?></div><?php endif; ?>
+<?php if ($error): ?>
+    <div class="alert alert-warning"><?= e($error) ?>
+    </div>
+<?php endif; ?>
 <div class="card p-3 p-md-4">
     <form method="get" class="row g-2 align-items-end mb-3 no-print">
-        <div class="col-12 col-md-4"><label class="form-label">Cari pengguna atau detail</label><input class="form-control" name="q" value="<?= e($q) ?>" placeholder="Nama, username, ringkasan"></div>
-        <div class="col-6 col-md-2"><label class="form-label">Tindakan</label><select class="form-select" name="aksi">
-                <option value="">Semua</option><?php foreach ($actions as $v): ?><option value="<?= e($v) ?>" <?= $action === $v ? 'selected' : '' ?>><?= e($v) ?></option><?php endforeach; ?>
-            </select></div>
-        <div class="col-6 col-md-2"><label class="form-label">Modul</label><select class="form-select" name="entitas">
-                <option value="">Semua</option><?php foreach ($entities as $v): ?><option value="<?= e($v) ?>" <?= $entity === $v ? 'selected' : '' ?>><?= e($v) ?></option><?php endforeach; ?>
-            </select></div>
-        <div class="col-6 col-md-2"><label class="form-label">Dari</label><input type="date" class="form-control" name="dari" value="<?= e($from) ?>"></div>
-        <div class="col-6 col-md-2"><label class="form-label">Sampai</label><input type="date" class="form-control" name="sampai" value="<?= e($to) ?>"></div>
-        <div class="col-12 d-flex gap-2"><button class="btn btn-primary">Terapkan</button><a class="btn btn-outline-secondary" href="activity.php">Reset</a></div>
+        <div class="col-12 col-md-4">
+            <label class="form-label">Cari pengguna atau detail</label>
+            <input class="form-control" name="q" value="<?= e($q) ?>" placeholder="Nama, username, ringkasan">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label">Tindakan</label>
+            <select class="form-select" name="aksi">
+                <option value="">Semua</option>
+                <?php foreach ($actions as $v): ?>
+                    <option value="<?= e($v) ?>" <?= $action === $v ? 'selected' : '' ?>>
+                        <?= e($v) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label">Modul</label>
+            <select class="form-select" name="entitas">
+                <option value="">Semua</option>
+                <?php foreach ($entities as $v): ?>
+                    <option value="<?= e($v) ?>"
+                        <?= $entity === $v ? 'selected' : '' ?>>
+                        <?= e($v) ?></option><?php endforeach; ?>
+            </select>
+        </div>
+
+        <div class="col-6 col-md-2">
+            <label class="form-label">Dari</label>
+            <input type="date" class="form-control" name="dari" value="<?= e($from) ?>">
+        </div>
+
+        <div class="col-6 col-md-2">
+            <label class="form-label">Sampai</label>
+            <input type="date" class="form-control" name="sampai" value="<?= e($to) ?>">
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary">Terapkan</button>
+            <a class="btn btn-outline-secondary" href="activity.php">Reset</a>
+        </div>
     </form>
-    <div class="d-flex justify-content-between mb-2"><span class="small text-secondary">Catatan aktivitas</span><strong><?= number_format($total, 0, ',', '.') ?> hasil</strong></div>
+
+    <div class="d-flex justify-content-between mb-2">
+        <span class="small text-secondary">Catatan aktivitas</span>
+        <strong><?= number_format($total, 0, ',', '.') ?> hasil</strong>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-hover align-middle">
             <thead>
@@ -110,19 +147,49 @@ require __DIR__ . '/includes/header.php';
                     <th>Ringkasan</th>
                 </tr>
             </thead>
-            <tbody><?php if (!$rows): ?><tr>
+
+            <tbody>
+                <?php if (!$rows): ?><tr>
                         <td colspan="5" class="text-center text-secondary">Belum ada aktivitas yang sesuai.</td>
                     </tr><?php else: foreach ($rows as $row): ?><tr>
-                            <td class="text-nowrap"><?= e($row['created_at']) ?></td>
-                            <td><?= e($row['nama_lengkap'] ?: $row['username'] ?: 'Akun dihapus') ?><br><small class="text-secondary"><?= e($row['username']) ?></small></td>
-                            <td><span class="badge text-bg-light"><?= e($row['aksi']) ?></span></td>
-                            <td><?= e($row['entitas']) ?><?= $row['record_id'] ? ' · #' . (int)$row['record_id'] : '' ?></td>
-                            <td><?= e($row['detail']) ?></td>
-                        </tr><?php endforeach;
-                        endif; ?></tbody>
+                            <td class="text-nowrap">
+                                <?= e($row['created_at']) ?>
+                            </td>
+                            <td><?= e($row['nama_lengkap'] ?: $row['username'] ?: 'Akun dihapus') ?>
+                                <br>
+                                <small class="text-secondary">
+                                    <?= e($row['username']) ?>
+                                </small>
+                            </td>
+                            <td>
+                                <span class="badge text-bg-light"><?= e($row['aksi']) ?>
+                                </span>
+                            </td>
+                            <td><?= e($row['entitas']) ?>
+                                <?= $row['record_id'] ? ' · #' . (int)$row['record_id'] : '' ?>
+                            </td>
+                            <td>
+                                <?= e($row['detail']) ?>
+                            </td>
+                        </tr>
+                <?php endforeach;
+                        endif; ?>
+            </tbody>
         </table>
-    </div><?php if ($pages > 1): ?><nav class="no-print">
-            <ul class="pagination pagination-sm"><?php for ($p = max(1, $page - 2); $p <= min($pages, $page + 2); $p++): ?><li class="page-item<?= $p === $page ? ' active' : '' ?>"><a class="page-link" href="activity.php?<?= e(http_build_query(array_merge($filters, ['page' => $p]))) ?>"><?= $p ?></a></li><?php endfor; ?></ul>
-        </nav><?php endif; ?>
+
+    </div>
+    <?php if ($pages > 1): ?>
+        <nav class="no-print">
+            <ul class="pagination pagination-sm">
+                <?php for ($p = max(1, $page - 2); $p <= min($pages, $page + 2); $p++): ?>
+                    <li class="page-item<?= $p === $page ? ' active' : '' ?>">
+                        <a class="page-link" href="activity.php?<?= e(http_build_query(array_merge($filters, ['page' => $p]))) ?>">
+                            <?= $p ?>
+                        </a>
+                    </li>
+                <?php endfor; ?>
+            </ul>
+        </nav>
+    <?php endif; ?>
 </div>
 <?php require __DIR__ . '/includes/footer.php'; ?>

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 // Modul khusus guru; route dan autentikasi tetap melalui index.php.
@@ -26,6 +27,8 @@ $composerAutoload = __DIR__ . '/../vendor/autoload.php';
 if (is_file($composerAutoload)) require_once $composerAutoload;
 $spreadsheetAvailable = extension_loaded('zip') && class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class);
 $action = (string)($_GET['action'] ?? 'list');
+if ($action === 'list' && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_form_action'] ?? '') === 'save') $action = 'create';
+if ($action === 'create' && $_SERVER['REQUEST_METHOD'] !== 'POST') redirect('index.php?module=guru&open_add=1');
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
 $pageTitle = 'Data Guru';
 $errors = [];
@@ -177,6 +180,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         [$values, $errors] = guru_validate_values($_POST, $fields, $schema);
+        if ($action === 'edit' && current_role() !== 'admin' && ($values['status'] ?? 'Aktif') !== 'Aktif') {
+            $linkedActive = $pdo->prepare("SELECT id FROM users WHERE guru_id=? AND role='guru' AND aktif=1 LIMIT 1");
+            $linkedActive->execute([$recordId]);
+            if ($linkedActive->fetchColumn()) $errors[] = 'Hanya Super Admin yang dapat menonaktifkan profil Guru yang memiliki akun aktif. Minta Super Admin menonaktifkan akun terlebih dahulu.';
+        }
         $newPhoto = null;
         $oldPhoto = $record['foto'] ?? null;
         $photoUpload = $_FILES['foto'] ?? null;
@@ -205,15 +213,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     record_activity($pdo, 'tambah', 'guru', $recordId, $values['nama'] ?? null);
                     flash('Data guru berhasil ditambahkan.');
                 } else {
+                    $pdo->beginTransaction();
                     $sets = array_map(static fn(string $column): string => guru_sql_identifier($column) . '=?', array_keys($values));
                     $stmt = $pdo->prepare('UPDATE guru SET ' . implode(',', $sets) . ' WHERE id=?');
                     $stmt->execute([...array_values($values), $recordId]);
+                    if (array_key_exists('nama', $values)) {
+                        $syncAccount = $pdo->prepare("UPDATE users SET nama_lengkap=? WHERE guru_id=? AND role='guru'");
+                        $syncAccount->execute([(string)$values['nama'], $recordId]);
+                    }
+                    if (($values['status'] ?? 'Aktif') !== 'Aktif') {
+                        $deactivateAccount = $pdo->prepare("UPDATE users SET aktif=0 WHERE guru_id=? AND role='guru' AND aktif=1");
+                        $deactivateAccount->execute([$recordId]);
+                    }
                     record_activity($pdo, 'ubah', 'guru', $recordId, $values['nama'] ?? null);
-                    flash('Data guru berhasil diperbarui.');
+                    $pdo->commit();
+                    flash(($values['status'] ?? 'Aktif') !== 'Aktif' ? 'Data guru diperbarui. Akun SIMS yang tertaut ikut dinonaktifkan; aktifkan profil terlebih dahulu sebelum akun dapat diaktifkan kembali.' : 'Data guru berhasil diperbarui.');
                 }
                 if ($action === 'edit' && ($newPhoto !== null || $removePhoto)) guru_remove_photo_file($oldPhoto);
                 redirect('index.php?module=guru');
             } catch (PDOException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 if ($newPhoto !== null) guru_remove_photo_file($newPhoto);
                 $errors[] = 'Data gagal disimpan. Periksa kembali NIP dan kolom yang wajib.';
             }
@@ -222,6 +241,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $record = array_merge($record, $values);
         $pageTitle = $action === 'create' ? 'Tambah Guru' : 'Edit Guru';
+        if ($action === 'create' && $errors) {
+            flash(implode(' ', $errors), 'danger');
+            redirect('index.php?module=guru&open_add=1');
+        }
     } elseif ($postAction === 'delete' && $action === 'delete' && $id > 0) {
         try {
             $pdo->beginTransaction();
@@ -337,10 +360,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $aliases = [
-                'nip' => 'nip', 'nama' => 'nama', 'namalengkap' => 'nama',
-                'jeniskelamin' => 'jenis_kelamin', 'jk' => 'jenis_kelamin',
-                'telepon' => 'telepon', 'nohp' => 'telepon', 'nomorhp' => 'telepon',
-                'email' => 'email', 'alamat' => 'alamat', 'status' => 'status',
+                'nip' => 'nip',
+                'nama' => 'nama',
+                'namalengkap' => 'nama',
+                'jeniskelamin' => 'jenis_kelamin',
+                'jk' => 'jenis_kelamin',
+                'telepon' => 'telepon',
+                'nohp' => 'telepon',
+                'nomorhp' => 'telepon',
+                'email' => 'email',
+                'alamat' => 'alamat',
+                'status' => 'status',
             ];
             $headerMap = [];
             if (is_array($rawHeader)) {
@@ -458,14 +488,18 @@ if ($action === 'list') {
         $statusFilter = '';
     }
     $where = $whereParts ? ' WHERE ' . implode(' AND ', $whereParts) : '';
-    $count = $pdo->prepare('SELECT COUNT(*) FROM guru' . $where);
+    $showAccountLink = current_role() === 'admin';
+    $guruFrom = $showAccountLink ? "guru g LEFT JOIN users u ON u.guru_id=g.id AND u.role='guru'" : 'guru';
+    $count = $pdo->prepare('SELECT COUNT(*) FROM ' . $guruFrom . $where);
     $count->execute($params);
     $total = (int)$count->fetchColumn();
     $pageCount = max(1, (int)ceil($total / $perPage));
     $page = min($page, $pageCount);
     $offset = ($page - 1) * $perPage;
     $selectColumns = array_merge(['id'], $fieldColumns, $hasPhotoColumn ? ['foto'] : [], $hasPublicColumn ? ['tampil_publik'] : [], isset($schema['created_at']) ? ['created_at'] : []);
-    $sql = 'SELECT ' . implode(',', array_map('guru_sql_identifier', array_unique($selectColumns))) . ' FROM guru' . $where . ' ORDER BY id DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
+    $qualifiedColumns = array_map(static fn(string $column): string => ($showAccountLink ? 'g.' : '') . guru_sql_identifier($column), array_unique($selectColumns));
+    if ($showAccountLink) $qualifiedColumns = array_merge($qualifiedColumns, ['u.id AS akun_user_id', 'u.username AS akun_username', 'u.aktif AS akun_aktif']);
+    $sql = 'SELECT ' . implode(',', $qualifiedColumns) . ' FROM ' . $guruFrom . $where . ' ORDER BY ' . ($showAccountLink ? 'g.id' : 'id') . ' DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
     $list = $pdo->prepare($sql);
     $list->execute($params);
     $rows = $list->fetchAll();
@@ -475,11 +509,54 @@ if ($action === 'list') {
 require __DIR__ . '/../includes/header.php';
 ?>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <div><h1 class="h3 mb-1"><?= e($pageTitle) ?></h1><p class="text-secondary mb-0">Modul khusus data guru · NIP unik · penyimpanan mengikuti struktur database yang diaudit.</p></div>
-    <?php if ($action === 'list'): ?><div class="d-flex flex-wrap gap-2"><?php if ($hasPublicColumn): ?><a class="btn btn-outline-secondary" href="public/guru.php" target="_blank" rel="noopener">Direktori Publik</a><?php endif; ?><?php if ($canManage): ?><a class="btn btn-outline-primary" href="index.php?module=guru&action=import">Impor <?= $spreadsheetAvailable ? 'CSV / XLS / XLSX' : 'CSV Excel' ?></a><a class="btn btn-primary" href="index.php?module=guru&action=create">+ Tambah Guru</a><?php endif; ?></div><?php endif; ?>
+    <div>
+        <h1 class="h3 mb-1"><?= e($pageTitle) ?></h1>
+        <p class="text-secondary mb-0">Data ini menjadi profil induk Guru; akun login dikelola terpisah dan ditautkan oleh Super Admin.</p>
+    </div>
+    <?php if ($action === 'list'): ?><div class="d-flex flex-wrap gap-2"><?php if ($hasPublicColumn): ?><a class="btn btn-outline-secondary" href="public/guru.php" target="_blank" rel="noopener">Direktori Publik</a><?php endif; ?><?php if ($canManage): ?><a class="btn btn-outline-primary" href="index.php?module=guru&action=import">Impor <?= $spreadsheetAvailable ? 'CSV / XLS / XLSX' : 'CSV Excel' ?></a><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createGuruModal"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Tambah Guru</button><?php endif; ?></div><?php endif; ?>
 </div>
 
-<?php if (!in_array($action, ['create', 'edit'], true)): foreach ($errors as $message): ?><div class="alert alert-danger"><?= e($message) ?></div><?php endforeach; endif; ?>
+<?php if ($action === 'list' && $canManage): ?>
+    <div class="modal fade app-entry-modal" id="createGuruModal" tabindex="-1" aria-labelledby="createGuruTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div class="modal-content">
+                <form method="post" enctype="multipart/form-data" action="index.php?module=guru">
+                    <div class="modal-header">
+                        <div>
+                            <h2 class="modal-title fs-5" id="createGuruTitle">Tambah Data Guru</h2>
+                            <p class="small text-secondary mb-0">Isi profil guru. Akun login dapat ditautkan melalui Manajemen Pengguna.</p>
+                        </div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <?php if (!empty($flashMessage) && ($flashMessage['type'] ?? '') === 'danger'): ?><div class="alert alert-danger" role="alert"><?= e($flashMessage['message']) ?></div><?php endif; ?>
+                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="save">
+                        <?php if ($hasPhotoColumn): ?><div class="mb-3"><label class="form-label" for="createGuruPhoto">Foto Profil <span class="text-secondary fw-normal">(opsional)</span></label><input class="form-control" id="createGuruPhoto" name="foto" type="file" accept="image/jpeg,image/png,image/webp">
+                                <div class="form-text">JPG, PNG, atau WebP; maksimal 2 MB.</div>
+                            </div><?php endif; ?>
+                        <div class="row"><?php foreach ($fields as $key => $field): ?><div class="col-md-6 mb-3"><label class="form-label<?= !empty($field['required']) ? ' required' : '' ?>" for="create_guru_<?= e($key) ?>"><?= e($field['label']) ?><?= $key === 'nip' ? ' (opsional)' : '' ?></label><?php if (($field['type'] ?? '') === 'select'): ?><select class="form-select" id="create_guru_<?= e($key) ?>" name="<?= e($key) ?>" <?= !empty($field['required']) ? 'required' : '' ?>>
+                                            <option value="">-- Pilih --</option><?php foreach ($field['options'] as $value => $label): ?><option value="<?= e($value) ?>" <?= $key === 'status' && $value === 'Aktif' ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+                                        </select><?php elseif (($field['type'] ?? '') === 'textarea'): ?><textarea class="form-control" id="create_guru_<?= e($key) ?>" name="<?= e($key) ?>" rows="3"></textarea><?php else: ?><input class="form-control" id="create_guru_<?= e($key) ?>" name="<?= e($key) ?>" type="<?= e($field['type']) ?>" <?= isset($field['max']) ? 'maxlength="' . (int)$field['max'] . '"' : '' ?> <?= !empty($field['required']) ? 'required' : '' ?>><?php endif; ?></div><?php endforeach; ?></div>
+                        <?php if ($hasPublicColumn): ?><div class="form-check mb-2"><input type="hidden" name="tampil_publik" value="0"><input class="form-check-input" type="checkbox" id="create_guru_public" name="tampil_publik" value="1"><label class="form-check-label" for="create_guru_public">Izinkan profil tampil di direktori publik</label>
+                                <div class="form-text">Centang setelah persetujuan guru diperoleh.</div>
+                            </div><?php endif; ?>
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button><button class="btn btn-primary"><i class="bi bi-check2 me-1" aria-hidden="true"></i>Simpan Guru</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script>
+        if (<?= isset($_GET['open_add']) ? 'true' : 'false' ?>) {
+            window.addEventListener('load', () => {
+                const modal = document.getElementById('createGuruModal');
+                if (window.bootstrap && modal) bootstrap.Modal.getOrCreateInstance(modal).show()
+            })
+        }
+    </script>
+<?php endif; ?>
+
+<?php if (!in_array($action, ['create', 'edit'], true)): foreach ($errors as $message): ?><div class="alert alert-danger"><?= e($message) ?></div><?php endforeach;
+                                                                                                                                            endif; ?>
 <?php if (!$hasPhotoColumn || !$hasPublicColumn): ?><div class="alert alert-warning">Fitur foto dan direktori guru publik belum aktif pada database. Terapkan migrasi tambahan <code>database/migrations/2026_10_27_guru_profile_fields.sql</code> setelah membuat backup. Data lama tidak dihapus oleh migrasi tersebut.</div><?php endif; ?>
 
 <?php if ($action === 'create' || $action === 'edit'): ?>
@@ -487,50 +564,120 @@ require __DIR__ . '/../includes/header.php';
     <div class="card p-3 p-md-4">
         <form method="post" enctype="multipart/form-data" action="index.php?module=guru&action=<?= e($action) ?><?= $action === 'edit' ? '&id=' . $id : '' ?>">
             <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="save">
-            <?php if ($errors): ?><div class="alert alert-danger"><ul class="mb-0"><?php foreach ($errors as $message): ?><li><?= e($message) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
+            <?php if ($errors): ?><div class="alert alert-danger">
+                    <ul class="mb-0"><?php foreach ($errors as $message): ?><li><?= e($message) ?></li><?php endforeach; ?></ul>
+                </div><?php endif; ?>
             <?php if ($hasPhotoColumn): $photoSrc = guru_photo_src($record['foto'] ?? null, (int)($record['id'] ?? $id)); ?>
-                <div class="row align-items-center mb-3"><div class="col-auto"><?php if ($photoSrc): ?><img id="guruPhotoPreview" class="guru-photo guru-photo-preview" src="<?= e($photoSrc) ?>" alt="Pratinjau foto guru"><?php else: ?><div id="guruPhotoPlaceholder" class="guru-photo guru-photo-placeholder"><i class="bi bi-person-fill"></i></div><img id="guruPhotoPreview" class="guru-photo guru-photo-preview d-none" alt="Pratinjau foto guru"><?php endif; ?></div><div class="col"><label class="form-label" for="guru_foto">Foto profil</label><input class="form-control" id="guru_foto" name="foto" type="file" accept="image/jpeg,image/png,image/webp"><div class="form-text">JPG, PNG, atau WebP; maksimal 2 MB. Pratinjau diperbarui sebelum disimpan.</div><?php if ($photoSrc && $action === 'edit'): ?><label class="form-check mt-2"><input class="form-check-input" type="checkbox" name="hapus_foto" value="1"><span class="form-check-label">Hapus foto saat menyimpan</span></label><?php endif; ?></div></div>
+                <div class="row align-items-center mb-3">
+                    <div class="col-auto"><?php if ($photoSrc): ?><img id="guruPhotoPreview" class="guru-photo guru-photo-preview" src="<?= e($photoSrc) ?>" alt="Pratinjau foto guru"><?php else: ?><div id="guruPhotoPlaceholder" class="guru-photo guru-photo-placeholder"><i class="bi bi-person-fill"></i></div><img id="guruPhotoPreview" class="guru-photo guru-photo-preview d-none" alt="Pratinjau foto guru"><?php endif; ?></div>
+                    <div class="col"><label class="form-label" for="guru_foto">Foto profil</label><input class="form-control" id="guru_foto" name="foto" type="file" accept="image/jpeg,image/png,image/webp">
+                        <div class="form-text">JPG, PNG, atau WebP; maksimal 2 MB. Pratinjau diperbarui sebelum disimpan.</div><?php if ($photoSrc && $action === 'edit'): ?><label class="form-check mt-2"><input class="form-check-input" type="checkbox" name="hapus_foto" value="1"><span class="form-check-label">Hapus foto saat menyimpan</span></label><?php endif; ?>
+                    </div>
+                </div>
             <?php endif; ?>
             <div class="row">
                 <?php foreach ($fields as $key => $field): ?><div class="col-md-6 mb-3"><label class="form-label<?= !empty($field['required']) ? ' required' : '' ?>" for="guru_<?= e($key) ?>"><?= e($field['label']) ?><?= $key === 'nip' ? ' (opsional)' : '' ?></label>
-                    <?php if (($field['type'] ?? '') === 'select'): ?><select class="form-select" id="guru_<?= e($key) ?>" name="<?= e($key) ?>"<?= !empty($field['required']) ? ' required' : '' ?>><option value="">-- Pilih --</option><?php foreach ($field['options'] as $value => $label): ?><option value="<?= e($value) ?>"<?= (string)($record[$key] ?? '') === (string)$value ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
-                    <?php elseif (($field['type'] ?? '') === 'textarea'): ?><textarea class="form-control" id="guru_<?= e($key) ?>" name="<?= e($key) ?>" rows="3"><?= e($record[$key] ?? '') ?></textarea>
-                    <?php else: ?><input class="form-control" id="guru_<?= e($key) ?>" name="<?= e($key) ?>" type="<?= e($field['type']) ?>" value="<?= e($record[$key] ?? '') ?>"<?= isset($field['max']) ? ' maxlength="' . (int)$field['max'] . '"' : '' ?><?= !empty($field['required']) ? ' required' : '' ?>><?php endif; ?>
-                </div><?php endforeach; ?>
+                        <?php if (($field['type'] ?? '') === 'select'): ?><select class="form-select" id="guru_<?= e($key) ?>" name="<?= e($key) ?>" <?= !empty($field['required']) ? ' required' : '' ?>>
+                                <option value="">-- Pilih --</option><?php foreach ($field['options'] as $value => $label): ?><option value="<?= e($value) ?>" <?= (string)($record[$key] ?? '') === (string)$value ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+                            </select>
+                        <?php elseif (($field['type'] ?? '') === 'textarea'): ?><textarea class="form-control" id="guru_<?= e($key) ?>" name="<?= e($key) ?>" rows="3"><?= e($record[$key] ?? '') ?></textarea>
+                        <?php else: ?><input class="form-control" id="guru_<?= e($key) ?>" name="<?= e($key) ?>" type="<?= e($field['type']) ?>" value="<?= e($record[$key] ?? '') ?>" <?= isset($field['max']) ? ' maxlength="' . (int)$field['max'] . '"' : '' ?><?= !empty($field['required']) ? ' required' : '' ?>><?php endif; ?>
+                    </div><?php endforeach; ?>
             </div>
-            <?php if ($hasPublicColumn): ?><div class="form-check mb-3"><input type="hidden" name="tampil_publik" value="0"><input class="form-check-input" type="checkbox" id="guru_tampil_publik" name="tampil_publik" value="1"<?= (int)($record['tampil_publik'] ?? 0) === 1 ? ' checked' : '' ?>><label class="form-check-label" for="guru_tampil_publik">Izinkan profil ini tampil di direktori publik</label><div class="form-text">Centang hanya setelah persetujuan guru diperoleh. Email, nomor telepon, dan alamat tidak ditampilkan pada halaman publik.</div></div><?php endif; ?>
+            <?php if ($hasPublicColumn): ?><div class="form-check mb-3"><input type="hidden" name="tampil_publik" value="0"><input class="form-check-input" type="checkbox" id="guru_tampil_publik" name="tampil_publik" value="1" <?= (int)($record['tampil_publik'] ?? 0) === 1 ? ' checked' : '' ?>><label class="form-check-label" for="guru_tampil_publik">Izinkan profil ini tampil di direktori publik</label>
+                    <div class="form-text">Centang hanya setelah persetujuan guru diperoleh. Email, nomor telepon, dan alamat tidak ditampilkan pada halaman publik.</div>
+                </div><?php endif; ?>
             <?php if ($errors && isset($values)): ?><input type="hidden" name="_preserve" value="1"><?php endif; ?>
-            <button class="btn btn-primary"<?= !$canManage ? ' disabled' : '' ?>>Simpan</button> <a class="btn btn-outline-secondary" href="index.php?module=guru">Batal</a>
+            <button class="btn btn-primary" <?= !$canManage ? ' disabled' : '' ?>>Simpan</button> <a class="btn btn-outline-secondary" href="index.php?module=guru">Batal</a>
         </form>
         <?php if ($hasPhotoColumn): ?><script>
-            document.getElementById('guru_foto')?.addEventListener('change', function () {
-                const file = this.files?.[0];
-                const preview = document.getElementById('guruPhotoPreview');
-                const placeholder = document.getElementById('guruPhotoPlaceholder');
-                if (file && preview && file.type.startsWith('image/')) {
-                    preview.src = URL.createObjectURL(file);
-                    preview.classList.remove('d-none');
-                    placeholder?.classList.add('d-none');
-                }
-            });
-        </script><?php endif; ?>
+                document.getElementById('guru_foto')?.addEventListener('change', function() {
+                    const file = this.files?.[0];
+                    const preview = document.getElementById('guruPhotoPreview');
+                    const placeholder = document.getElementById('guruPhotoPlaceholder');
+                    if (file && preview && file.type.startsWith('image/')) {
+                        preview.src = URL.createObjectURL(file);
+                        preview.classList.remove('d-none');
+                        placeholder?.classList.add('d-none');
+                    }
+                });
+            </script><?php endif; ?>
     </div>
 <?php elseif ($action === 'detail'): ?>
-    <div class="card p-3 p-md-4"><div class="d-flex align-items-center gap-3 mb-3"><?php $detailPhoto = guru_photo_src($detail['foto'] ?? null, $id); ?><?php if ($detailPhoto): ?><img class="guru-photo" src="<?= e($detailPhoto) ?>" alt="Foto <?= e($detail['nama'] ?? 'guru') ?>"><?php else: ?><div class="guru-photo guru-photo-placeholder"><i class="bi bi-person-fill"></i></div><?php endif; ?><div><h2 class="h5 mb-1"><?= e($detail['nama'] ?? '') ?></h2><span class="text-secondary">Biodata Guru</span></div></div><dl class="row mb-0"><?php foreach ($fields as $key => $field): ?><dt class="col-sm-3 py-2"><?= e($field['label']) ?></dt><dd class="col-sm-9 py-2"><?= e(guru_display_value($key, $detail[$key] ?? null)) ?></dd><?php endforeach; ?><?php if ($hasPublicColumn): ?><dt class="col-sm-3 py-2">Publikasi</dt><dd class="col-sm-9 py-2"><?= (int)($detail['tampil_publik'] ?? 0) === 1 ? 'Diizinkan' : 'Tidak ditampilkan' ?></dd><?php endif; ?><?php if (isset($detail['created_at'])): ?><dt class="col-sm-3 py-2">Tanggal dibuat</dt><dd class="col-sm-9 py-2"><?= e($detail['created_at']) ?></dd><?php endif; ?></dl><div class="mt-3"><a class="btn btn-outline-secondary" href="index.php?module=guru">Kembali</a><?php if ($canManage): ?> <a class="btn btn-primary" href="index.php?module=guru&action=edit&id=<?= $id ?>">Edit</a><?php endif; ?></div></div>
+    <div class="card p-3 p-md-4">
+        <div class="d-flex align-items-center gap-3 mb-3"><?php $detailPhoto = guru_photo_src($detail['foto'] ?? null, $id); ?><?php if ($detailPhoto): ?><img class="guru-photo" src="<?= e($detailPhoto) ?>" alt="Foto <?= e($detail['nama'] ?? 'guru') ?>"><?php else: ?><div class="guru-photo guru-photo-placeholder"><i class="bi bi-person-fill"></i></div><?php endif; ?><div>
+            <h2 class="h5 mb-1"><?= e($detail['nama'] ?? '') ?></h2><span class="text-secondary">Biodata Guru</span>
+        </div>
+        </div>
+        <dl class="row mb-0"><?php foreach ($fields as $key => $field): ?><dt class="col-sm-3 py-2"><?= e($field['label']) ?></dt>
+                <dd class="col-sm-9 py-2"><?= e(guru_display_value($key, $detail[$key] ?? null)) ?></dd><?php endforeach; ?><?php if ($hasPublicColumn): ?><dt class="col-sm-3 py-2">Publikasi</dt>
+                <dd class="col-sm-9 py-2"><?= (int)($detail['tampil_publik'] ?? 0) === 1 ? 'Diizinkan' : 'Tidak ditampilkan' ?></dd><?php endif; ?><?php if (isset($detail['created_at'])): ?><dt class="col-sm-3 py-2">Tanggal dibuat</dt>
+                <dd class="col-sm-9 py-2"><?= e($detail['created_at']) ?></dd><?php endif; ?>
+        </dl>
+        <div class="mt-3"><a class="btn btn-outline-secondary" href="index.php?module=guru">Kembali</a><?php if ($canManage): ?> <a class="btn btn-primary" href="index.php?module=guru&action=edit&id=<?= $id ?>">Edit</a><?php endif; ?></div>
+    </div>
 <?php elseif ($action === 'import'): ?>
     <?php if (!$canManage): ?><div class="alert alert-warning">Akun ini tidak memiliki izin mengimpor data guru.</div><?php else: ?>
-        <div class="card p-3 p-md-4 mb-3"><p>Unggah berkas maksimal 5 MB dan 1.000 baris. CSV hasil ekspor Excel selalu didukung. <?= $spreadsheetAvailable ? 'XLS dan XLSX aktif melalui PhpSpreadsheet.' : 'XLS/XLSX tersedia setelah PhpSpreadsheet dan ekstensi PHP ZIP dipasang/diaktifkan.' ?></p><p>Header wajib: <code>nama,jenis_kelamin</code> atau <code>Nama,JK</code>. Kolom opsional: <code>nip,telepon,email,alamat,status</code>. NIP ganda dilewati dan data lama tidak ditimpa.</p><p><a class="btn btn-outline-primary btn-sm" href="outputs/01a17976-f3da-7573-90e5-670290bb3000/Template_Impor_Guru_SIMS.csv" download>Unduh Template CSV</a></p>
-            <form method="post" enctype="multipart/form-data" action="index.php?module=guru&action=import"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="import"><div class="mb-3"><label class="form-label" for="csv_file">Berkas CSV<?= $spreadsheetAvailable ? ' atau XLS / XLSX' : '' ?></label><input class="form-control" type="file" id="csv_file" name="csv_file" accept=".csv,text/csv<?= $spreadsheetAvailable ? ',.xls,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel' : '' ?>" required></div><?php if ($spreadsheetAvailable): ?><div class="mb-3"><label class="form-label" for="worksheet_name">Nama sheet (opsional)</label><input class="form-control" id="worksheet_name" name="worksheet_name" value="<?= e($_POST['worksheet_name'] ?? '') ?>" placeholder="Kosongkan untuk memakai sheet pertama"><div class="form-text">Sheet harus sama persis dengan nama di berkas Excel.</div></div><?php endif; ?><button class="btn btn-primary">Validasi dan Impor</button> <a class="btn btn-outline-secondary" href="index.php?module=guru">Kembali</a></form>
+        <div class="card p-3 p-md-4 mb-3">
+            <p>Unggah berkas maksimal 5 MB dan 1.000 baris. CSV hasil ekspor Excel selalu didukung. <?= $spreadsheetAvailable ? 'XLS dan XLSX aktif melalui PhpSpreadsheet.' : 'XLS/XLSX tersedia setelah PhpSpreadsheet dan ekstensi PHP ZIP dipasang/diaktifkan.' ?></p>
+            <p>Header wajib: <code>nama,jenis_kelamin</code> atau <code>Nama,JK</code>. Kolom opsional: <code>nip,telepon,email,alamat,status</code>. NIP ganda dilewati dan data lama tidak ditimpa.</p>
+            <p><a class="btn btn-outline-primary btn-sm" href="outputs/01a17976-f3da-7573-90e5-670290bb3000/Template_Impor_Guru_SIMS.csv" download>Unduh Template CSV</a></p>
+            <form method="post" enctype="multipart/form-data" action="index.php?module=guru&action=import"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="import">
+                <div class="mb-3"><label class="form-label" for="csv_file">Berkas CSV<?= $spreadsheetAvailable ? ' atau XLS / XLSX' : '' ?></label><input class="form-control" type="file" id="csv_file" name="csv_file" accept=".csv,text/csv<?= $spreadsheetAvailable ? ',.xls,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel' : '' ?>" required></div><?php if ($spreadsheetAvailable): ?><div class="mb-3"><label class="form-label" for="worksheet_name">Nama sheet (opsional)</label><input class="form-control" id="worksheet_name" name="worksheet_name" value="<?= e($_POST['worksheet_name'] ?? '') ?>" placeholder="Kosongkan untuk memakai sheet pertama">
+                        <div class="form-text">Sheet harus sama persis dengan nama di berkas Excel.</div>
+                    </div><?php endif; ?><button class="btn btn-primary">Validasi dan Impor</button> <a class="btn btn-outline-secondary" href="index.php?module=guru">Kembali</a>
+            </form>
         </div>
-        <?php if ($importReport): ?><div class="alert alert-info"><strong>Ringkasan impor:</strong> <?= (int)$importReport['success'] ?> berhasil, <?= (int)$importReport['skipped'] ?> dilewati, <?= (int)$importReport['failed'] ?> gagal.</div><?php if ($importReport['messages']): ?><div class="card p-3"><h2 class="h6">Rincian baris</h2><ul class="mb-0"><?php foreach ($importReport['messages'] as $message): ?><li><?= e($message) ?></li><?php endforeach; ?></ul></div><?php endif; ?><?php endif; ?>
-    <?php endif; ?>
-<?php else: ?>
-    <div class="card p-3">
-        <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><form class="row g-2 flex-grow-1 no-print" method="get"><input type="hidden" name="module" value="guru"><div class="col-sm-8 col-md-5"><input class="form-control" name="q" value="<?= e($q) ?>" placeholder="Cari NIP, nama, telepon, email..."></div><?php if (isset($fields['status'])): ?><div class="col-sm-4 col-md-3"><select class="form-select" name="status" aria-label="Filter status"><option value="">Semua status</option><?php foreach ($fields['status']['options'] as $value => $label): ?><option value="<?= e($value) ?>"<?= $statusFilter === $value ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="col-auto"><button class="btn btn-outline-primary">Cari / Filter</button> <a class="btn btn-outline-secondary" href="index.php?module=guru">Reset</a></div></form><?php if ($canManage): ?><a class="btn btn-outline-success no-print" href="index.php?module=guru&action=export"><i class="bi bi-download"></i> Ekspor CSV</a><?php endif; ?></div>
-        <div class="table-responsive"><table class="table table-striped table-hover align-middle"><thead class="table-light"><tr><th>No.</th><?php if ($hasPhotoColumn): ?><th>Foto</th><?php endif; ?><?php foreach ($fields as $key => $field): ?><th><?= e($field['label']) ?></th><?php endforeach; ?><?php if ($hasPublicColumn): ?><th>Publikasi</th><?php endif; ?><th class="no-print">Aksi</th></tr></thead><tbody>
-            <?php if (!$rows): ?><tr><td colspan="<?= count($fields) + 2 + (int)$hasPhotoColumn + (int)$hasPublicColumn ?>" class="text-center text-secondary py-4">Belum ada data guru.</td></tr><?php else: foreach ($rows as $index => $row): ?><tr><td><?= $offset + $index + 1 ?></td><?php if ($hasPhotoColumn): ?><td><?php $rowPhoto = guru_photo_src($row['foto'] ?? null, (int)$row['id']); ?><?php if ($rowPhoto): ?><img class="guru-photo guru-photo-small" src="<?= e($rowPhoto) ?>" alt="Foto <?= e($row['nama'] ?? 'guru') ?>"><?php else: ?><span class="guru-photo guru-photo-small guru-photo-placeholder"><i class="bi bi-person-fill"></i></span><?php endif; ?></td><?php endif; ?><?php foreach ($fields as $key => $field): ?><td><?= e(guru_display_value($key, $row[$key] ?? null)) ?></td><?php endforeach; ?><?php if ($hasPublicColumn): ?><td><span class="badge <?= (int)($row['tampil_publik'] ?? 0) === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>"><?= (int)($row['tampil_publik'] ?? 0) === 1 ? 'Diizinkan' : 'Privat' ?></span></td><?php endif; ?><td class="no-print text-nowrap"><a class="btn btn-sm btn-outline-secondary" href="index.php?module=guru&action=detail&id=<?= (int)$row['id'] ?>">Detail</a><?php if ($canManage): ?> <a class="btn btn-sm btn-outline-primary" href="index.php?module=guru&action=edit&id=<?= (int)$row['id'] ?>">Edit</a> <form class="d-inline" method="post" action="index.php?module=guru&action=delete&id=<?= (int)$row['id'] ?>" onsubmit="return confirm('Hapus data guru ini? Data yang masih berelasi tidak dapat dihapus.')"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="delete"><button class="btn btn-sm btn-outline-danger">Hapus</button></form><?php endif; ?></td></tr><?php endforeach; endif; ?>
-        </tbody></table></div>
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2"><div class="small text-secondary">Menampilkan <?= $total ? $offset + 1 : 0 ?>–<?= min($offset + $perPage, $total) ?> dari <?= $total ?> guru.</div><?php if ($pageCount > 1): ?><nav aria-label="Halaman data guru"><ul class="pagination pagination-sm mb-0"><?php for ($number = max(1, $page - 2); $number <= min($pageCount, $page + 2); $number++): ?><li class="page-item<?= $number === $page ? ' active' : '' ?>"><a class="page-link" href="index.php?<?= e(http_build_query(['module' => 'guru', 'q' => $q, 'status' => $statusFilter, 'page' => $number])) ?>"><?= $number ?></a></li><?php endfor; ?></ul></nav><?php endif; ?></div>
-    </div>
-<?php endif; ?>
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+        <?php if ($importReport): ?><div class="alert alert-info"><strong>Ringkasan impor:</strong> <?= (int)$importReport['success'] ?> berhasil, <?= (int)$importReport['skipped'] ?> dilewati, <?= (int)$importReport['failed'] ?> gagal.</div><?php if ($importReport['messages']): ?><div class="card p-3">
+                    <h2 class="h6">Rincian baris</h2>
+                    <ul class="mb-0"><?php foreach ($importReport['messages'] as $message): ?><li><?= e($message) ?></li><?php endforeach; ?></ul>
+                </div><?php endif; ?><?php endif; ?>
+            <?php endif; ?>
+        <?php else: ?>
+            <div class="card p-3">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                    <form class="row g-2 flex-grow-1 no-print" method="get">
+                        <input type="hidden" name="module" value="guru">
+                        <div class="col-sm-8 col-md-5">
+                            <input class="form-control" name="q" value="<?= e($q) ?>" placeholder="Cari NIP, nama, telepon, email...">
+                        </div><?php if (isset($fields['status'])): ?><div class="col-sm-4 col-md-3"><select class="form-select" name="status" aria-label="Filter status">
+                                    <option value="">Semua status</option>
+                                    <?php foreach ($fields['status']['options'] as $value => $label): ?>
+                                        <option value="<?= e($value) ?>" <?= $statusFilter === $value ? ' selected' : '' ?>>
+                                            <?= e($label) ?></option><?php endforeach; ?>
+                                </select></div><?php endif; ?>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-primary">Cari / Filter</button>
+                            <a class="btn btn-outline-secondary" href="index.php?module=guru">Reset</a>
+                        </div>
+                    </form><?php if ($canManage): ?><a class="btn btn-outline-success no-print" href="index.php?module=guru&action=export"><i class="bi bi-download"></i> Ekspor CSV</a><?php endif; ?>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>No.</th><?php if ($hasPhotoColumn): ?><th>Foto</th><?php endif; ?><?php foreach ($fields as $key => $field): ?><th><?= e($field['label']) ?></th><?php endforeach; ?><?php if ($hasPublicColumn): ?><th>Publikasi</th><?php endif; ?><?php if ($showAccountLink): ?><th>Akun SIMS</th><?php endif; ?><th class="no-print">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (!$rows): ?><tr>
+                                    <td colspan="<?= count($fields) + 2 + (int)$hasPhotoColumn + (int)$hasPublicColumn + (int)$showAccountLink ?>" class="text-center text-secondary py-4">Belum ada data guru.</td>
+                                </tr><?php else: foreach ($rows as $index => $row): ?><tr>
+                                        <td><?= $offset + $index + 1 ?></td><?php if ($hasPhotoColumn): ?><td><?php $rowPhoto = guru_photo_src($row['foto'] ?? null, (int)$row['id']); ?><?php if ($rowPhoto): ?><img class="guru-photo guru-photo-small" src="<?= e($rowPhoto) ?>" alt="Foto <?= e($row['nama'] ?? 'guru') ?>"><?php else: ?><span class="guru-photo guru-photo-small guru-photo-placeholder"><i class="bi bi-person-fill"></i></span><?php endif; ?></td><?php endif; ?><?php foreach ($fields as $key => $field): ?><td><?= e(guru_display_value($key, $row[$key] ?? null)) ?></td><?php endforeach; ?><?php if ($hasPublicColumn): ?><td><span class="badge <?= (int)($row['tampil_publik'] ?? 0) === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>"><?= (int)($row['tampil_publik'] ?? 0) === 1 ? 'Diizinkan' : 'Privat' ?></span></td><?php endif; ?><?php if ($showAccountLink): ?><td><?php if (!empty($row['akun_user_id'])): ?><a class="btn btn-sm <?= (int)$row['akun_aktif'] === 1 ? 'btn-outline-success' : 'btn-outline-secondary' ?>" href="users.php?q=<?= rawurlencode((string)$row['akun_username']) ?>&role=guru"><i class="bi bi-person-lock me-1"></i><?= (int)$row['akun_aktif'] === 1 ? 'Akun aktif' : 'Akun nonaktif' ?></a>
+                                                    <div class="small text-secondary mt-1"><?= e($row['akun_username']) ?></div><?php if (($row['status'] ?? 'Aktif') !== 'Aktif' && (int)$row['akun_aktif'] === 1): ?><div class="small text-warning-emphasis mt-1">Profil nonaktif; periksa status akun.</div><?php endif; ?><?php elseif (($row['status'] ?? 'Aktif') === 'Aktif'): ?><a class="btn btn-sm btn-outline-primary" href="users.php?buat=guru&amp;guru_id=<?= (int)$row['id'] ?>#buat-akun"><i class="bi bi-person-plus me-1"></i>Buat akun</a><?php else: ?><span class="small text-secondary">Aktifkan profil sebelum membuat akun</span><?php endif; ?>
+                                            </td><?php endif; ?><td class="no-print text-nowrap"><a class="btn btn-sm btn-outline-secondary" href="index.php?module=guru&action=detail&id=<?= (int)$row['id'] ?>">Detail</a><?php if ($canManage): ?> <a class="btn btn-sm btn-outline-primary" href="index.php?module=guru&action=edit&id=<?= (int)$row['id'] ?>">Edit</a>
+                                                <form class="d-inline" method="post" action="index.php?module=guru&action=delete&id=<?= (int)$row['id'] ?>" onsubmit="return confirm('Hapus data guru ini? Data yang masih berelasi tidak dapat dihapus.')"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="delete"><button class="btn btn-sm btn-outline-danger">Hapus</button></form><?php endif; ?>
+                                        </td>
+                                    </tr><?php endforeach;
+                                    endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="small text-secondary">Menampilkan <?= $total ? $offset + 1 : 0 ?>–<?= min($offset + $perPage, $total) ?> dari <?= $total ?> guru.</div><?php if ($pageCount > 1): ?><nav aria-label="Halaman data guru">
+                            <ul class="pagination pagination-sm mb-0"><?php for ($number = max(1, $page - 2); $number <= min($pageCount, $page + 2); $number++): ?><li class="page-item<?= $number === $page ? ' active' : '' ?>"><a class="page-link" href="index.php?<?= e(http_build_query(['module' => 'guru', 'q' => $q, 'status' => $statusFilter, 'page' => $number])) ?>"><?= $number ?></a></li><?php endfor; ?></ul>
+                        </nav><?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+        <?php require __DIR__ . '/../includes/footer.php'; ?>

@@ -11,33 +11,75 @@ $pageTitle = 'Login';
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login | SIMS SMP Negeri 4 Pirime</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="assets/style.css" rel="stylesheet">
 </head>
 
-<body class="d-flex align-items-center min-vh-100">
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-5 col-lg-4">
-                <div class="card p-4 p-md-5">
-                    <div class="text-center mb-4">
-                        <div class="display-6">🏫</div>
-                        <h1 class="h4 mt-2">SIMS SMPN 4 Pirime</h1>
-                        <p class="text-secondary">Silakan masuk untuk mengelola data sekolah</p>
-                    </div>
-                    <?php if (!empty($_GET['inactive'])): ?><div class="alert alert-warning">Akun ini tidak aktif atau aksesnya telah dicabut. Hubungi pengelola sekolah.</div><?php endif; ?>
-                    <?php if (!empty($error)): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
-                    <form method="post" autocomplete="off">
-                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
-                        <div class="mb-3"><label class="form-label">Username</label><input class="form-control" name="username" required autofocus></div>
-                        <div class="mb-4"><label class="form-label">Password</label><input class="form-control" type="password" name="password" required></div>
-                        <button class="btn btn-primary w-100">Masuk</button>
-                    </form>
-                    <p class="small text-secondary text-center mt-4">Gunakan akun yang diberikan oleh pengelola sekolah.</p>
-                    <p class="text-center mb-0"><a href="public/index.php">Kunjungi portal publik sekolah</a></p>
-                </div>
+<body class="login-page">
+    <main class="login-stage">
+        <section class="login-panel" aria-labelledby="loginTitle">
+            <div class="login-brand">
+                <img src="assets/Lambang-Sekolah-SMP-Negeri-4-Pirime.png" alt="Lambang SMP Negeri 4 Pirime" class="login-logo">
+                <h1 id="loginTitle">SIMS SMPN 4 PIRIME</h1>
+                <p>Sistem Informasi Manajemen Sekolah</p>
+                <span class="login-brand-accent" aria-hidden="true"></span>
             </div>
-        </div>
-    </div>
+            <?php if (!empty($_GET['inactive'])): ?>
+                <div class="alert alert-warning" role="alert">Akun ini tidak aktif atau aksesnya telah dicabut. Hubungi pengelola sekolah.</div>
+            <?php endif; ?>
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger" role="alert"><?= e($error) ?></div>
+            <?php endif; ?>
+            <form method="post" class="login-form">
+                <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                <div class="mb-3"><label class="form-label" for="loginUsername">Username</label>
+                    <div class="login-input-wrap"><i class="bi bi-person" aria-hidden="true"></i>
+                        <input class="form-control" id="loginUsername" name="username" placeholder="Masukkan identitas login yang diberikan sekolah" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+                    </div>
+                    <!-- <div class="form-text">Siswa masuk dengan NIS; Guru/Kepala Sekolah dengan NIP; Operator dengan ID Operator; Super Admin dengan username.</div> -->
+                </div>
+                <!-- <p class="small text-secondary mb-3">Belum mempunyai akun atau lupa password? Siswa, Guru, dan Kepala Sekolah dapat menghubungi Operator. Operator menghubungi Super Admin. Akun hanya dibuat oleh Super Admin.</p> -->
+                <div class="mb-4">
+                    <label class="form-label" for="loginPassword">Password</label>
+                    <div class="login-input-wrap">
+                        <i class="bi bi-lock" aria-hidden="true"></i>
+                        <input
+                            class="form-control"
+                            id="loginPassword"
+                            type="password"
+                            name="password"
+                            placeholder="Masukkan password"
+                            autocomplete="current-password"
+                            required>
+                        <button
+                            class="login-password-toggle"
+                            type="button" id="toggleLoginPassword"
+                            aria-label="Tampilkan password"
+                            aria-pressed="false">
+                            <i class="bi bi-eye"
+                                aria-hidden="true">
+                            </i>
+                        </button>
+                    </div>
+                </div>
+                <button class="login-submit" type="submit">
+                    <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>Masuk</button>
+            </form>
+            <!-- <div class="login-help"><i class="bi bi-info-circle" aria-hidden="true"></i><p>Gunakan akun yang diberikan oleh pengelola sekolah. Pada login pertama atau setelah reset, Anda harus mengganti kata sandi sebelum dashboard dapat dibuka. Jika lupa kata sandi atau akun terkunci, hubungi Super Admin sekolah.</p></div> -->
+            <div class="login-divider"><span>atau</span></div>
+            <a class="login-back-link" href="public/index.php"><i class="bi bi-arrow-left" aria-hidden="true"></i>Kembali ke portal publik sekolah</a>
+        </section>
+    </main>
+    <script>
+        document.getElementById('toggleLoginPassword')?.addEventListener('click', function() {
+            const input = document.getElementById('loginPassword');
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            this.setAttribute('aria-pressed', show ? 'true' : 'false');
+            this.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password');
+            this.innerHTML = '<i class="bi ' + (show ? 'bi-eye-slash' : 'bi-eye') + '" aria-hidden="true"></i>';
+        });
+    </script>
 </body>
 
 </html>
