@@ -44,6 +44,7 @@ function portal_profile(PDO $pdo): array
 {
     return array_replace(['nama' => 'SMP Negeri 4 Pirime', 'alamat' => '', 'telepon' => '', 'email' => '', 'sejarah' => '', 'visi' => '', 'misi' => '', 'sambutan' => '', 'jam_layanan' => '', 'peta_url' => ''], portal_row($pdo, 'SELECT * FROM profil_sekolah WHERE id=1 LIMIT 1'));
 }
+// Expose aggregate public counts only, and leave unavailable metrics blank when a schema is incomplete.
 function portal_public_stats(PDO $pdo): array
 {
     $stats = ['siswa' => null, 'guru' => null, 'kelas' => null, 'pengumuman' => null];
@@ -64,6 +65,7 @@ function portal_public_stats(PDO $pdo): array
     }
     return $stats;
 }
+// Build accessible breadcrumbs and add the parent listing on article-detail pages.
 function portal_breadcrumb_markup(string $activePage, string $pageTitle): string
 {
     $parents = [

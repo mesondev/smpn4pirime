@@ -1,1 +1,15 @@
-.schema-alert{margin:0 0 22px;padding:16px 19px;border:1px solid #f2d08b;border-left:4px solid #d59418;border-radius:12px;background:#fff9e9;color:#694b13;font-size:.93rem}.schema-alert code{color:#593c0a;overflow-wrap:anywhere}
+/* Consistent notice for missing or unapplied database schema. */
+.schema-alert {
+  margin: 0 0 22px;
+  padding: 16px 19px;
+  border: 1px solid #f2d08b;
+  border-left: 4px solid #d59418;
+  border-radius: 12px;
+  background: #fff9e9;
+  color: #694b13;
+  font-size: .93rem;
+}
+.schema-alert code {
+  color: #593c0a;
+  overflow-wrap: anywhere;
+}

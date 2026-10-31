@@ -1,3 +1,4 @@
+// Public portal interactions: social feedback, hero carousel, weather, and navigation.
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-social-animate]').forEach((iconButton) => {
         iconButton.addEventListener('click', () => {

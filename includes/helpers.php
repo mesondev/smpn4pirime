@@ -14,6 +14,7 @@ if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+// Write structured operational logs while excluding credential-like fields from context.
 function app_log(string $level, string $event, array $context = []): string
 {
     $reference = bin2hex(random_bytes(6));
@@ -70,6 +71,7 @@ set_error_handler(static function (int $severity, string $message, string $file,
     return false;
 });
 
+// Escape dynamic values before placing them in HTML text or attributes.
 function e(mixed $value): string
 {
     return htmlspecialchars((string)($value ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -86,6 +88,7 @@ function db_has_column(PDO $pdo, string $table, string $column): bool
     }
     return $cache[$key];
 }
+// Build a project-relative URL that also works when the app is installed in a subfolder.
 function app_url(string $path = ''): string
 {
     $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? '/index.php'));
@@ -106,6 +109,7 @@ function csrf_token(): string
     }
     return $_SESSION['_csrf'];
 }
+// Reject state-changing requests unless their session-bound token matches.
 function verify_csrf(): void
 {
     $token = (string)($_POST['_csrf'] ?? '');
@@ -128,6 +132,7 @@ function is_logged_in(): bool
 {
     return isset($_SESSION['user_id']);
 }
+// Refresh authorization data from the database so stale session roles cannot grant access.
 function require_login(): void
 {
     if (!is_logged_in()) {
@@ -195,6 +200,7 @@ function role_label(?string $role = null): string
         'kepala_sekolah' => 'Kepala Sekolah',
     ][$role] ?? 'Pengguna';
 }
+// Centralize read permissions so navigation visibility and route checks use the same policy.
 function can_view_module(string $module): bool
 {
     // Data kelas dan mapel dibatasi untuk pengelola serta Kepala Sekolah; Guru mengakses kelas tugasnya melalui dashboard Guru.
@@ -222,6 +228,7 @@ function can_view_module(string $module): bool
     }
     return in_array(current_role(), ['admin', 'operator', 'guru'], true);
 }
+// Centralize write permissions separately from read access.
 function can_manage_module(string $module): bool
 {
     if (current_role() === 'admin') {
@@ -275,6 +282,7 @@ function field_label(string $key): string
 {
     return ucwords(str_replace('_', ' ', $key));
 }
+// Validate image content and store it under an unguessable server-generated filename.
 function store_user_photo(array $upload): array
 {
     $uploadError = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
@@ -304,6 +312,7 @@ function remove_user_photo(mixed $relativePath): void
     $file = $root ? realpath($root . DIRECTORY_SEPARATOR . $match[1]) : false;
     if ($root && $file && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_file($file)) @unlink($file);
 }
+// Validate private biodata documents by MIME and signature before storing outside public access.
 function store_biodata_document(array $upload): array
 {
     $uploadError = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);

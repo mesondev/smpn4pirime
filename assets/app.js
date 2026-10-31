@@ -1,3 +1,4 @@
+// Dashboard controls: sidebar state, theme preference, charts, and page interactions.
 document.addEventListener('DOMContentLoaded', () => {
     const sidebar = document.getElementById('appSidebar');
     const toggle = document.getElementById('sidebarToggle');

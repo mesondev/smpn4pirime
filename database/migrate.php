@@ -84,6 +84,7 @@ function migration_schema_ready(PDO $pdo, string $name): bool
     return true;
 }
 
+// Split migration files on SQL statement boundaries without splitting quoted or commented semicolons.
 function migration_statements(string $sql): array
 {
     $statements = [];
