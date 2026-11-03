@@ -265,31 +265,76 @@ $publicRoutes = [
     '/public/privasi.php',
     '/public/cek_pendaftaran.php',
 ];
-if (function_exists('curl_init')) {
+if (!function_exists('curl_init')) {
+    if (getenv('SIMS_TEST_HTTP') === '1') {
+        $report('FAIL', 'HTTP smoke tests require the PHP cURL extension');
+    } else {
+        $report('SKIP', 'HTTP smoke tests require the PHP cURL extension');
+    }
+} else {
     $probe = curl_init($httpBase . '/login.php');
-    curl_setopt_array($probe, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 2, CURLOPT_TIMEOUT => 6]);
+
+    curl_setopt_array($probe, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TIMEOUT => 6,
+    ]);
+
     $probeBody = curl_exec($probe);
-    $probeCode = (int)curl_getinfo($probe, CURLINFO_RESPONSE_CODE);
+    $probeCode = (int) curl_getinfo($probe, CURLINFO_RESPONSE_CODE);
+    $probeError = curl_error($probe);
     curl_close($probe);
-    if ($probeBody === false || $probeCode === 0) {
-        if (getenv('SIMS_TEST_HTTP') === '1') $report('FAIL', 'HTTP smoke tests require a running local web server at ' . $httpBase);
-        else $report('SKIP', 'Local web server unavailable; set SIMS_TEST_HTTP=1 to require HTTP checks');
-    } else $test('local login and public routes return HTTP 200 without server errors', static function () use ($assert, $httpBase, $publicRoutes): void {
-        foreach ($publicRoutes as $route) {
-            $curl = curl_init($httpBase . $route);
-            curl_setopt_array($curl, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 2, CURLOPT_TIMEOUT => 6]);
-            $body = curl_exec($curl);
-            $code = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-            $error = curl_error($curl);
-            curl_close($curl);
-            $assert($body !== false && $code === 200, $route . ' returned HTTP ' . $code . ($error !== '' ? ': ' . $error : ''));
-            $assert(!str_contains((string)$body, 'Terjadi kesalahan pada sistem. Silakan coba kembali.'), $route . ' rendered the generic server-error page');
-            $assert(!preg_match('/(?:Fatal error|Uncaught Error|Parse error|Warning:|Notice:)/i', (string)$body), $route . ' rendered a PHP error');
+
+    $serverAvailable = $probeBody !== false && $probeCode > 0;
+
+    if (!$serverAvailable) {
+        if (getenv('SIMS_TEST_HTTP') === '1') {
+            $report(
+                'FAIL',
+                'HTTP server unavailable at ' . $httpBase .
+                ' — ' . ($probeError ?: 'HTTP ' . $probeCode)
+            );
+        } else {
+            $report('SKIP', 'Local web server unavailable; HTTP checks skipped');
         }
-    });
-    $test('standalone protected pages require login without PHP fatal errors', static function () use ($assert, $httpBase): void {
-        foreach (
-            [
+    } else {
+        $test('local login and public routes return HTTP 200 without server errors', static function () use ($assert, $httpBase, $publicRoutes): void {
+            foreach ($publicRoutes as $route) {
+                $curl = curl_init($httpBase . $route);
+
+                curl_setopt_array($curl, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_CONNECTTIMEOUT => 2,
+                    CURLOPT_TIMEOUT => 6,
+                ]);
+
+                $body = curl_exec($curl);
+                $code = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+                $error = curl_error($curl);
+                curl_close($curl);
+
+                $assert(
+                    $body !== false && $code === 200,
+                    $route . ' returned HTTP ' . $code .
+                    ($error !== '' ? ': ' . $error : '')
+                );
+
+                $assert(
+                    !str_contains((string) $body, 'Terjadi kesalahan pada sistem. Silakan coba kembali.'),
+                    $route . ' rendered the generic server-error page'
+                );
+
+                $assert(
+                    !preg_match('/(?:Fatal error|Uncaught Error|Parse error|Warning:|Notice:)/i', (string) $body),
+                    $route . ' rendered a PHP error'
+                );
+            }
+        });
+
+        $test('standalone protected pages require login without PHP fatal errors', static function () use ($assert, $httpBase): void {
+            foreach ([
                 '/activity.php',
                 '/biodata.php',
                 '/bulk_absensi.php',
@@ -307,24 +352,40 @@ if (function_exists('curl_init')) {
                 '/teacher.php',
                 '/users.php',
                 '/api/notification_count.php',
-            ] as $route
-        ) {
-            $curl = curl_init($httpBase . $route);
-            curl_setopt_array($curl, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_CONNECTTIMEOUT => 2, CURLOPT_TIMEOUT => 6]);
-            $body = curl_exec($curl);
-            $code = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-            curl_close($curl);
-            $assert($body !== false && $code === 200, $route . ' returned HTTP ' . $code);
-            $assert(str_contains((string)$body, '<title>Login |'), $route . ' did not redirect an anonymous visitor to login');
-            $assert(!preg_match('/(?:Fatal error|Uncaught Error|Parse error|Warning:|Notice:)/i', (string)$body), $route . ' rendered a PHP error');
-        }
-    });
-} elseif (getenv('SIMS_TEST_HTTP') === '1') {
-    $report('FAIL', 'HTTP smoke tests require the PHP cURL extension');
-} else {
-    $report('SKIP', 'HTTP smoke tests require the PHP cURL extension');
-}
+            ] as $route) {
+                $curl = curl_init($httpBase . $route);
 
+                curl_setopt_array($curl, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_CONNECTTIMEOUT => 2,
+                    CURLOPT_TIMEOUT => 6,
+                ]);
+
+                $body = curl_exec($curl);
+                $code = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+                $error = curl_error($curl);
+                curl_close($curl);
+
+                $assert(
+                    $body !== false && $code === 200,
+                    $route . ' returned HTTP ' . $code .
+                    ($error !== '' ? ': ' . $error : '')
+                );
+
+                $assert(
+                    str_contains((string) $body, '<title>Login |'),
+                    $route . ' did not redirect an anonymous visitor to login'
+                );
+
+                $assert(
+                    !preg_match('/(?:Fatal error|Uncaught Error|Parse error|Warning:|Notice:)/i', (string) $body),
+                    $route . ' rendered a PHP error'
+                );
+            }
+        });
+    }
+}
 $databaseName = (string)(getenv('SIMS_DB_NAME') ?: 'sims_db');
 if (strtolower((string)(getenv('SIMS_APP_ENV') ?: 'local')) === 'production') {
     $report('SKIP', 'Database integrity checks are disabled in production');
