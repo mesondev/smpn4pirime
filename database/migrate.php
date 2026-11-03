@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/migration_helpers.php';
 require_once __DIR__ . '/../config/database.php';
 
 if ((string)$pdo->query('SELECT DATABASE()')->fetchColumn() !== 'sims_db') {
@@ -71,6 +72,38 @@ function migration_schema_ready(PDO $pdo, string $name): bool
         '2026_10_31_student_biodata_details.sql' => ['biodata_pengguna' => ['email', 'nama_ayah', 'nama_ibu', 'nama_wali', 'asal_sekolah', 'golongan_darah', 'dokumen_akta_path', 'dokumen_kip_path']],
         '2026_10_31_teacher_biodata_details.sql' => ['biodata_pengguna' => ['email_pribadi', 'gelar_depan', 'nuptk', 'nik_guru', 'perguruan_tinggi', 'status_kepegawaian', 'tmt', 'jabatan_tambahan']],
         '2026_10_31_principal_biodata_details.sql' => ['biodata_pengguna' => ['nip_kepala', 'email_dinas_kepsek', 'pendidikan_pelatihan', 'jabatan_saat_ini', 'sk_kepala_sekolah', 'tanggal_mulai_menjabat', 'bidang_sertifikasi', 'jabatan_sebelumnya', 'nomor_sk_jabatan'], 'profil_sekolah' => ['npsn']],
+        '2026_11_01_public_contact_messages.sql' => [
+            'pesan_kontak' => ['nama_pengirim', 'email_pengirim', 'kategori', 'subjek', 'status', 'dibaca_admin'],
+            'pesan_kontak_balasan' => ['pesan_id', 'pengirim', 'admin_user_id', 'isi', 'status_email'],
+        ],
+        '2026_11_01_school_profile_identity.sql' => ['profil_sekolah' => ['alamat_jalan', 'kampung', 'distrik', 'kabupaten', 'provinsi', 'kode_pos', 'status_sekolah', 'jenjang', 'naungan', 'akreditasi', 'akreditasi_status', 'visi_status', 'misi_status', 'tujuan']],
+        '2026_11_01_school_profile_content_review.sql' => ['profil_sekolah' => ['tujuan_status']],
+        '2026_11_01_z_school_profile_history_review.sql' => ['profil_sekolah' => ['sejarah_status']],
+        '2026_11_02_public_services.sql' => [
+            'portal_ekstrakurikuler' => ['nama', 'status', 'urutan'],
+            'portal_fasilitas' => ['nama', 'status', 'urutan'],
+            'portal_struktur_sekolah' => ['nama', 'jabatan', 'status'],
+            'portal_prestasi_publik' => ['judul', 'penerima', 'bukti_terverifikasi', 'izin_publikasi', 'status'],
+            'portal_dokumen_publik' => ['judul', 'nama_file', 'status'],
+            'portal_jadwal_publik' => ['tahun_ajaran', 'tingkat', 'hari', 'mata_pelajaran', 'status'],
+            'portal_tautan_sosial' => ['platform', 'url', 'status'],
+            'ppdb_periode' => ['tahun_ajaran', 'mulai', 'selesai', 'status'],
+            'ppdb_pendaftar' => ['nomor_pendaftaran', 'kunci_status_hash', 'nama_calon', 'status'],
+        ],
+        '2026_11_03_user_display_preferences.sql' => [
+            'preferensi_pengguna' => [
+                'user_id',
+                'tema',
+                'ukuran_teks',
+                'kerapatan_tabel',
+                'sidebar_ciut',
+                'periode_grafik',
+                'diperbarui_pada',
+            ],
+        ],
+        '2026_11_03_ppdb_management.sql' => [
+            'ppdb_status_history' => ['pendaftar_id', 'status_sebelumnya', 'status_baru', 'catatan', 'actor_user_id', 'dibuat_pada'],
+        ],
         default => [],
     };
     if (!$required) return false;
@@ -81,82 +114,26 @@ function migration_schema_ready(PDO $pdo, string $name): bool
         $type = $pdo->query("SELECT column_type FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='role'")->fetchColumn();
         if (!is_string($type) || !str_contains($type, "'siswa'")) return false;
     }
+    if ($name === '2026_11_03_ppdb_management.sql') {
+        $type = $pdo->query("SELECT column_type FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='ppdb_pendaftar' AND column_name='status'")->fetchColumn();
+        if (!is_string($type) || !str_contains($type, "'Dibatalkan'")) return false;
+    }
     return true;
 }
 
-// Split migration files on SQL statement boundaries without splitting quoted or commented semicolons.
-function migration_statements(string $sql): array
-{
-    $statements = [];
-    $buffer = '';
-    $quote = null;
-    $lineComment = false;
-    $blockComment = false;
-    $length = strlen($sql);
-    for ($i = 0; $i < $length; $i++) {
-        $char = $sql[$i];
-        $next = $sql[$i + 1] ?? '';
-        if ($lineComment) {
-            if ($char === "\n") {
-                $lineComment = false;
-                $buffer .= "\n";
-            }
-            continue;
-        }
-        if ($blockComment) {
-            if ($char === '*' && $next === '/') {
-                $blockComment = false;
-                $i++;
-            }
-            continue;
-        }
-        if ($quote === null && $char === '-' && $next === '-' && (($sql[$i + 2] ?? '') === ' ' || ($sql[$i + 2] ?? '') === "\t")) {
-            $lineComment = true;
-            $i++;
-            continue;
-        }
-        if ($quote === null && $char === '#') {
-            $lineComment = true;
-            continue;
-        }
-        if ($quote === null && $char === '/' && $next === '*') {
-            $blockComment = true;
-            $i++;
-            continue;
-        }
-        if ($quote !== null) {
-            $buffer .= $char;
-            if ($char === '\\' && $quote !== '`' && $i + 1 < $length) $buffer .= $sql[++$i];
-            elseif ($char === $quote) {
-                if (($sql[$i + 1] ?? '') === $quote) $buffer .= $sql[++$i];
-                else $quote = null;
-            }
-            continue;
-        }
-        if ($char === "'" || $char === '"' || $char === '`') {
-            $quote = $char;
-            $buffer .= $char;
-        } elseif ($char === ';') {
-            if (trim($buffer) !== '') $statements[] = trim($buffer);
-            $buffer = '';
-        } else {
-            $buffer .= $char;
-        }
-    }
-    if (trim($buffer) !== '') $statements[] = trim($buffer);
-    return $statements;
-}
-
 $files = glob(__DIR__ . '/migrations/*.sql') ?: [];
-sort($files, SORT_STRING);
-$dependencyOrder = [
-    '2026_10_30_account_workflow.sql' => '2026_10_30_user_biodata.sql',
-    '2026_10_30_user_biodata.sql' => '2026_10_30_account_workflow.sql',
+$migrationDependencies = [
+    '2026_11_03_ppdb_management.sql' => ['2026_11_02_public_services.sql'],
+    '2026_10_30_account_workflow.sql' => ['2026_10_30_user_biodata.sql'],
+    '2026_11_01_school_profile_content_review.sql' => ['2026_11_01_school_profile_identity.sql'],
+    '2026_11_01_z_school_profile_history_review.sql' => ['2026_11_01_school_profile_content_review.sql'],
 ];
-usort($files, static fn(string $left, string $right): int => strcmp(
-    $dependencyOrder[basename($left)] ?? basename($left),
-    $dependencyOrder[basename($right)] ?? basename($right),
-));
+try {
+    $files = order_migrations($files, $migrationDependencies);
+} catch (RuntimeException $exception) {
+    fwrite(STDERR, $exception->getMessage() . " Tidak ada migrasi yang dijalankan.\n");
+    exit(5);
+}
 $schemaValidatedMigrations = [
     '2026_10_27_guru_profile_fields.sql',
     '2026_10_29_public_portal.sql',
@@ -175,6 +152,13 @@ $schemaValidatedMigrations = [
     '2026_10_31_student_biodata_details.sql',
     '2026_10_31_teacher_biodata_details.sql',
     '2026_10_31_principal_biodata_details.sql',
+    '2026_11_01_public_contact_messages.sql',
+    '2026_11_01_school_profile_identity.sql',
+    '2026_11_01_school_profile_content_review.sql',
+    '2026_11_01_z_school_profile_history_review.sql',
+    '2026_11_02_public_services.sql',
+    '2026_11_03_user_display_preferences.sql',
+    '2026_11_03_ppdb_management.sql',
 ];
 foreach ($files as $file) {
     $name = basename($file);

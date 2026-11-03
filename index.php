@@ -15,18 +15,34 @@ if ($moduleKey === 'notifikasi') {
     require __DIR__ . '/notifications.php';
     exit;
 }
+if ($moduleKey === 'pesan_masuk') {
+    require __DIR__ . '/pesan_masuk.php';
+    exit;
+}
+if ($moduleKey === 'ppdb_admin') {
+    require __DIR__ . '/ppdb_admin.php';
+    exit;
+}
+if ($moduleKey === 'portal_admin') {
+    require __DIR__ . '/portal_admin.php';
+    exit;
+}
 if ($moduleKey === '') {
     $pageTitle = 'Dashboard';
     $today = new DateTimeImmutable('today');
-    $period = (string)($_GET['periode'] ?? 'month');
-    if (!in_array($period, ['today', 'week', 'month', 'custom'], true)) $period = 'month';
-    $periodLabels = ['today' => 'Hari ini', 'week' => 'Minggu ini', 'month' => '30 hari terakhir', 'custom' => 'Rentang khusus'];
+    $defaultDisplayPeriod = user_display_preferences($pdo)['periode_grafik'];
+    $period = (string)($_GET['periode'] ?? $defaultDisplayPeriod);
+    if (!in_array($period, ['today', 'week', 'month', '3months', '6months', '12months', 'custom'], true)) $period = 'month';
+    $periodLabels = ['today' => 'Hari ini', 'week' => 'Minggu ini', 'month' => '30 hari terakhir', '3months' => '3 bulan', '6months' => '6 bulan', '12months' => '12 bulan', 'custom' => 'Rentang khusus'];
     $startInput = trim((string)($_GET['mulai'] ?? ''));
     $endInput = trim((string)($_GET['sampai'] ?? ''));
     $filterError = '';
     $periodStart = match ($period) {
         'today' => $today,
         'week' => $today->modify('monday this week'),
+        '3months' => $today->modify('first day of this month')->modify('-2 months'),
+        '6months' => $today->modify('first day of this month')->modify('-5 months'),
+        '12months' => $today->modify('first day of this month')->modify('-11 months'),
         'custom' => DateTimeImmutable::createFromFormat('!Y-m-d', $startInput) ?: $today->modify('-29 days'),
         default => $today->modify('-29 days'),
     };
@@ -109,13 +125,7 @@ if ($moduleKey === '') {
         : null;
     $todayStudentAttendance = array_fill_keys(['Hadir', 'Izin', 'Sakit', 'Alpa'], 0);
     $todayAttendanceRate = null;
-    $recentOperatorStudents = [];
-    $recentOperatorTeachers = [];
-    $operatorClassOverview = [];
-    $operatorTodaySchedule = [];
-    $todayAttendanceByClass = [];
-    $operatorNotifications = [];
-    if (current_role() === 'operator') {
+    if (in_array(current_role(), ['admin', 'operator'], true)) {
         try {
             $todayStmt = $pdo->prepare('SELECT status,COUNT(*) AS jumlah FROM absensi WHERE tanggal=? GROUP BY status');
             $todayStmt->execute([$today->format('Y-m-d')]);
@@ -125,6 +135,14 @@ if ($moduleKey === '') {
         } catch (PDOException $ignored) {
             $todayAttendanceRate = null;
         }
+    }
+    $recentOperatorStudents = [];
+    $recentOperatorTeachers = [];
+    $operatorClassOverview = [];
+    $operatorTodaySchedule = [];
+    $todayAttendanceByClass = [];
+    $operatorNotifications = [];
+    if (current_role() === 'operator') {
         try {
             $recentOperatorStudents = $pdo->query("SELECT s.id,s.nis,s.nama,s.jenis_kelamin,s.status,k.nama_kelas FROM siswa s LEFT JOIN kelas k ON k.id=s.kelas_id ORDER BY s.id DESC LIMIT 6")->fetchAll();
         } catch (PDOException $ignored) {
@@ -416,6 +434,42 @@ if ($moduleKey === '') {
     $weeklyLabels = array_column(array_values($weekBuckets), 'label');
     $weeklyRates = array_map(static fn($bucket) => round($bucket['hadir'] * 100 / $bucket['total'], 1), array_values($weekBuckets));
 
+    $studentTrendLabels = [];
+    $studentTrendNew = [];
+    $studentTrendTotal = [];
+    $studentTrendHasData = false;
+    if (in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true)) {
+        $trendStart = $periodStart->modify('first day of this month');
+        $trendEnd = $periodEnd->modify('first day of this month');
+        $trendEndExclusive = $trendEnd->modify('+1 month');
+        $monthKeys = [];
+        $monthNames = [1 => 'Jan', 2 => 'Feb', 3 => 'Mar', 4 => 'Apr', 5 => 'Mei', 6 => 'Jun', 7 => 'Jul', 8 => 'Agu', 9 => 'Sep', 10 => 'Okt', 11 => 'Nov', 12 => 'Des'];
+        for ($month = $trendStart; $month <= $trendEnd; $month = $month->modify('+1 month')) {
+            $key = $month->format('Y-m');
+            $monthKeys[] = $key;
+            $studentTrendLabels[] = ($monthNames[(int)$month->format('n')] ?? $month->format('M')) . ' ' . $month->format('Y');
+        }
+        $monthlyNewStudents = array_fill_keys($monthKeys, 0);
+        try {
+            $priorStudents = $pdo->prepare('SELECT COUNT(*) FROM siswa WHERE created_at < ?');
+            $priorStudents->execute([$trendStart->format('Y-m-d 00:00:00')]);
+            $cumulativeStudents = (int)$priorStudents->fetchColumn();
+            $studentTrendStmt = $pdo->prepare("SELECT DATE_FORMAT(created_at,'%Y-%m') AS bulan,COUNT(*) AS jumlah FROM siswa WHERE created_at>=? AND created_at<? GROUP BY DATE_FORMAT(created_at,'%Y-%m') ORDER BY bulan");
+            $studentTrendStmt->execute([$trendStart->format('Y-m-d 00:00:00'), $trendEndExclusive->format('Y-m-d 00:00:00')]);
+            foreach ($studentTrendStmt->fetchAll() as $row) if (isset($monthlyNewStudents[$row['bulan']])) $monthlyNewStudents[$row['bulan']] = (int)$row['jumlah'];
+            foreach ($monthKeys as $key) {
+                $cumulativeStudents += $monthlyNewStudents[$key];
+                $studentTrendNew[] = $monthlyNewStudents[$key];
+                $studentTrendTotal[] = $cumulativeStudents;
+            }
+            $studentTrendHasData = $cumulativeStudents > 0;
+        } catch (PDOException $ignored) {
+            $studentTrendLabels = [];
+            $studentTrendNew = [];
+            $studentTrendTotal = [];
+        }
+    }
+
     $announcements = $pdo->query("SELECT judul,isi,mulai_tayang FROM pengumuman WHERE status='Terbit' AND (mulai_tayang IS NULL OR mulai_tayang<=CURDATE()) AND (selesai_tayang IS NULL OR selesai_tayang>=CURDATE()) ORDER BY created_at DESC LIMIT 4")->fetchAll();
     $upcomingEvents = $pdo->query("SELECT judul,tanggal_mulai AS tanggal,kategori AS jenis FROM kalender_akademik WHERE tanggal_mulai>=CURDATE() AND status<>'Dibatalkan' UNION ALL SELECT nama_kegiatan,tanggal_mulai,'Kokurikuler' FROM kegiatan_kokurikuler WHERE tanggal_mulai>=CURDATE() AND status<>'Dibatalkan' ORDER BY tanggal LIMIT 5")->fetchAll();
     $schoolName = (string)$pdo->query('SELECT nama FROM profil_sekolah ORDER BY id LIMIT 1')->fetchColumn();
@@ -447,7 +501,11 @@ if ($moduleKey === '') {
                     <?php endforeach; ?>
                 </select>
             </div>
-            <?php if (current_role() === 'kepala_sekolah'): ?><div><label class="form-label small mb-1" for="semester">Semester Nilai</label><select class="form-select form-select-sm" id="semester" name="semester"><option value="">Semua semester</option><option value="1" <?= $academicSemester === '1' ? 'selected' : '' ?>>Ganjil</option><option value="2" <?= $academicSemester === '2' ? 'selected' : '' ?>>Genap</option></select></div><?php endif; ?>
+            <?php if (current_role() === 'kepala_sekolah'): ?><div><label class="form-label small mb-1" for="semester">Semester Nilai</label><select class="form-select form-select-sm" id="semester" name="semester">
+                        <option value="">Semua semester</option>
+                        <option value="1" <?= $academicSemester === '1' ? 'selected' : '' ?>>Ganjil</option>
+                        <option value="2" <?= $academicSemester === '2' ? 'selected' : '' ?>>Genap</option>
+                    </select></div><?php endif; ?>
             <div><label class="form-label small mb-1" for="periode">Periode Kehadiran</label>
                 <select class="form-select form-select-sm" id="periode" name="periode" onchange="this.form.submit()">
                     <?php foreach ($periodLabels as $key => $label): ?>
@@ -460,15 +518,11 @@ if ($moduleKey === '') {
             </div>
             <div>
                 <label class="form-label small mb-1" for="mulai">Dari</label>
-                <input class="form-control form-control-sm" id="mulai" type="date" name="mulai" value="
-                <?= e($periodStart->format('Y-m-d')) ?>"
-                    <?= $period === 'custom' ? '' : ' disabled' ?>>
+                <input class="form-control form-control-sm" id="mulai" type="date" name="mulai" value="<?= e($periodStart->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>>
             </div>
             <div>
                 <label class="form-label small mb-1" for="sampai">Sampai</label>
-                <input class="form-control form-control-sm" id="sampai" type="date" name="sampai" value="
-                    <?= e($periodEnd->format('Y-m-d')) ?>"
-                    <?= $period === 'custom' ? '' : ' disabled' ?>>
+                <input class="form-control form-control-sm" id="sampai" type="date" name="sampai" value="<?= e($periodEnd->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>>
             </div>
             <button class="btn btn-primary btn-sm">Terapkan</button>
         </form>
@@ -478,16 +532,12 @@ if ($moduleKey === '') {
             <?= e($filterError) ?>
         </div>
     <?php endif; ?>
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-4 <?= current_role() === 'kepala_sekolah' ? 'principal-stat-grid' : (current_role() === 'admin' ? 'admin-stat-grid' : (current_role() === 'operator' ? 'dashboard-operator-stats' : '')) ?>">
         <?php $dashboardStats = current_role() === 'admin' ? [
-            ['Total Pengguna', $adminAccountStats['total'], 'bi-people-fill', 'blue', 'Akun yang terdaftar'],
-            ['Super Admin', $adminAccountStats['admin'], 'bi-shield-lock', 'purple', 'Pengelola sistem'],
-            ['Operator', $adminAccountStats['operator'], 'bi-person-gear', 'green', 'Akun operator'],
-            ['Kepala Sekolah', $adminAccountStats['kepala_sekolah'], 'bi-person-vcard', 'orange', 'Akun kepala sekolah'],
-            ['Guru', $adminAccountStats['guru'], 'bi-person-badge-fill', 'blue', 'Akun guru'],
-            ['Siswa', $adminAccountStats['siswa'], 'bi-mortarboard', 'green', 'Akun siswa'],
-            ['Menunggu Persetujuan', $pendingBiodataTotal, 'bi-person-check', 'orange', 'Biodata diajukan untuk diperiksa'],
-            ['Akun Nonaktif', $adminAccountStats['nonaktif'], 'bi-person-x', 'purple', 'Akses login dinonaktifkan'],
+            ['Total Siswa', $totalStudents, 'bi-mortarboard-fill', 'blue', $schoolYearId !== '' ? 'Aktif pada tahun ajaran terpilih' : 'Semua tahun ajaran'],
+            ['Guru Aktif', $teacherTotal, 'bi-person-workspace', 'green', 'Data induk guru berstatus aktif'],
+            ['Rombongan Belajar', $classTotal, 'bi-door-open-fill', 'orange', $schoolYearId !== '' ? 'Tahun ajaran terpilih' : 'Semua tahun ajaran'],
+            ['Kehadiran Hari Ini', $todayAttendanceRate, 'bi-clipboard-check-fill', 'purple', 'Persentase dari catatan absensi hari ini'],
         ] : [
             ['Total Siswa', $totalStudents, 'bi-people-fill', 'blue', 'Aktif pada tahun terpilih'],
             ['Total Guru', $teacherTotal, 'bi-person-badge-fill', 'green', 'Guru aktif'],
@@ -525,24 +575,24 @@ if ($moduleKey === '') {
                 <h2 class="h5 mb-1" id="principalDataStatusTitle">Dashboard menunggu data sekolah</h2>
                 <p class="mb-3 text-secondary">Ringkasan di bawah tetap berfungsi, tetapi beberapa bagian belum dapat dihitung karena data induk belum tersedia. Data tidak dibuat otomatis agar angka yang tampil tetap sesuai keadaan sekolah.</p>
                 <div class="principal-data-checklist" aria-label="Status data induk sekolah">
-                    <span class="principal-data-check 
+                    <span class="principal-data-check
                     <?= $schoolYearTotal > 0 ? 'is-ready' : 'is-missing' ?>">
-                    <i class="bi <?= $schoolYearTotal > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">                        
-                    </i>Tahun ajaran: <?= number_format($schoolYearTotal, 0, ',', '.') ?>
-                </span>
-                    <span class="principal-data-check 
+                        <i class="bi <?= $schoolYearTotal > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">
+                        </i>Tahun ajaran: <?= number_format($schoolYearTotal, 0, ',', '.') ?>
+                    </span>
+                    <span class="principal-data-check
                     <?= $totalStudents > 0 ? 'is-ready' : 'is-missing' ?>">
-                    <i class="bi <?= $totalStudents > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">                        
-                    </i>Siswa aktif: <?= number_format($totalStudents, 0, ',', '.') ?>
-                </span>
+                        <i class="bi <?= $totalStudents > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">
+                        </i>Siswa aktif: <?= number_format($totalStudents, 0, ',', '.') ?>
+                    </span>
                     <span class="principal-data-check <?= $teacherTotal > 0 ? 'is-ready' : 'is-missing' ?>">
-                    <i class="bi <?= $teacherTotal > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">                        
-                    </i>Guru aktif: <?= number_format($teacherTotal, 0, ',', '.') ?>
-                </span>
+                        <i class="bi <?= $teacherTotal > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">
+                        </i>Guru aktif: <?= number_format($teacherTotal, 0, ',', '.') ?>
+                    </span>
                     <span class="principal-data-check <?= $classTotal > 0 ? 'is-ready' : 'is-missing' ?>">
-                    <i class="bi <?= $classTotal > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">                        
-                    </i>Kelas: <?= number_format($classTotal, 0, ',', '.') ?>
-                </span>
+                        <i class="bi <?= $classTotal > 0 ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill' ?>">
+                        </i>Kelas: <?= number_format($classTotal, 0, ',', '.') ?>
+                    </span>
                 </div>
                 <p class="small text-secondary mt-3 mb-0">Mohon Operator atau Super Admin melengkapi data tahun ajaran, kelas, guru, dan siswa. Setelah itu, jadwal, absensi, nilai, serta catatan pembelajaran akan mengisi panel terkait.</p>
             </div>
@@ -550,7 +600,7 @@ if ($moduleKey === '') {
     <?php endif; ?>
 
     <?php if (current_role() === 'operator'): ?>
-        <section class="row g-3 mb-4" aria-label="Ringkasan administrasi operator">
+        <section class="row g-3 mb-4 dashboard-operator-overview" aria-label="Ringkasan administrasi operator">
             <div class="col-12 col-xl-6">
                 <div class="card chart-card h-100">
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
@@ -560,7 +610,7 @@ if ($moduleKey === '') {
                         </div><a class="btn btn-sm btn-outline-primary" href="index.php?module=siswa">Kelola siswa</a>
                     </div>
                     <?php if (!$recentOperatorStudents): ?><div class="empty-state">Belum ada data siswa.</div>
-                        <?php else: ?><div class="table-responsive">
+                    <?php else: ?><div class="table-responsive">
                             <table class="table table-sm align-middle mb-0">
                                 <thead>
                                     <tr>
@@ -735,14 +785,47 @@ if ($moduleKey === '') {
                 </div>
             </div>
         </section><?php endif; ?>
-    <?php if (current_role() === 'admin'): ?><div class="row g-3 mb-4">
+    <?php if (current_role() === 'admin'): ?><div class="row g-3 mb-4 dashboard-admin-activity">
             <div class="col-xl-4">
                 <section class="card p-3 p-md-4 h-100">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h2 class="h5 mb-0">Kontrol Sistem</h2><i class="bi bi-shield-check text-primary fs-4"></i>
                     </div>
+                    <details class="admin-role-breakdown mb-3">
+                        <summary><span><strong><?= number_format($adminAccountStats['total'], 0, ',', '.') ?></strong> akun SIMS</span><span>Ringkasan peran <i class="bi bi-chevron-down" aria-hidden="true"></i></span></summary>
+                        <dl>
+                            <div>
+                                <dt>Super Admin</dt>
+                                <dd><?= number_format($adminAccountStats['admin'], 0, ',', '.') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Operator</dt>
+                                <dd><?= number_format($adminAccountStats['operator'], 0, ',', '.') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Kepala Sekolah</dt>
+                                <dd><?= number_format($adminAccountStats['kepala_sekolah'], 0, ',', '.') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Guru</dt>
+                                <dd><?= number_format($adminAccountStats['guru'], 0, ',', '.') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Akun Siswa</dt>
+                                <dd><?= number_format($adminAccountStats['siswa'], 0, ',', '.') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Nonaktif</dt>
+                                <dd><?= number_format($adminAccountStats['nonaktif'], 0, ',', '.') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Biodata menunggu</dt>
+                                <dd><?= number_format($pendingBiodataTotal, 0, ',', '.') ?></dd>
+                            </div>
+                        </dl>
+                    </details>
                     <div class="d-grid gap-2"><a class="btn btn-outline-primary text-start" href="users.php"><i class="bi bi-person-gear me-2"></i>Manajemen Pengguna</a><a class="btn btn-outline-primary text-start" href="biodata.php"><i class="bi bi-person-check me-2"></i>Persetujuan Biodata (<?= number_format($pendingBiodataTotal, 0, ',', '.') ?> menunggu)</a><a class="btn btn-outline-primary text-start" href="passwords.php"><i class="bi bi-key me-2"></i>Reset Password</a><a class="btn btn-outline-primary text-start" href="index.php?module=guru"><i class="bi bi-person-badge me-2"></i>Data Guru</a><a class="btn btn-outline-primary text-start" href="activity.php"><i class="bi bi-clock-history me-2"></i>Log Aktivitas</a><a class="btn btn-outline-primary text-start" href="learning.php?view=materi"><i class="bi bi-mortarboard me-2"></i>Pemantauan Materi & Tugas</a><a class="btn btn-outline-primary text-start" href="index.php?module=profil_sekolah"><i class="bi bi-gear me-2"></i>Pengaturan Sekolah</a></div>
-                    <p class="small text-secondary mt-3 mb-0">Backup dan pemulihan belum tersedia sebagai fitur aplikasi. Siapkan backup terjadwal sebelum mengelola database produksi.</p>
+                    <p class="small text-secondary mt-3 mb-0">Backup dan uji pemulihan tersedia melalui CLI. Atur jadwal dan salinan terpisah sesuai panduan <code>docs/backup-restore.md</code>; tombol backup di dashboard belum tersedia.</p>
                 </section>
             </div>
             <div class="col-xl-8">
@@ -773,47 +856,78 @@ if ($moduleKey === '') {
                 </section>
             </div>
         </div><?php endif; ?>
-    <div class="row g-3 mb-3">
-        <div class="col-xl-8">
-            <div class="card chart-card">
+    <?php if (in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true)): ?><div class="row g-3 mb-4 dashboard-analytics-primary">
+            <div class="col-12 col-xl-8">
+                <section class="card chart-card student-trend-card" aria-labelledby="studentIntakeTitle">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                            <h2 class="chart-title" id="studentIntakeTitle">Tren Data Siswa</h2>
+                            <p class="chart-subtitle mb-0">Data baru dicatat dan akumulasi data siswa berdasarkan waktu pencatatan di SIMS.</p>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div class="chart-range-tabs" role="group" aria-label="Rentang grafik tren siswa">
+                                <?php foreach (['12months' => '12 Bulan', '6months' => '6 Bulan', '3months' => '3 Bulan'] as $rangeKey => $rangeLabel): ?>
+                                    <a class="chart-range-tab<?= $period === $rangeKey ? ' is-active' : '' ?>" href="index.php?<?= e(http_build_query(['periode' => $rangeKey, 'tahun_ajaran_id' => $schoolYearId, 'semester' => $academicSemester])) ?>" <?= $period === $rangeKey ? ' aria-current="true"' : '' ?>><?= e($rangeLabel) ?></a>
+                                <?php endforeach; ?>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="reports.php?type=siswa">Lihat laporan</a>
+                        </div>
+                    </div>
+                    <div class="chart-canvas student-trend-canvas"><?php if (!$studentTrendHasData): ?><div class="empty-chart empty-chart-plot">
+                                <div class="empty-chart-message"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><strong>Grafik siswa menunggu data</strong><span>Tambahkan data siswa agar tren pencatatan dan akumulasi tampil di sini.</span><?php if (can_manage_module('siswa')): ?><a class="btn btn-sm btn-primary" href="index.php?module=siswa"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Kelola data siswa</a><?php endif; ?></div>
+                            </div><?php else: ?><canvas id="studentIntakeTrend" role="img" aria-label="Grafik data siswa baru dicatat dan akumulasi siswa"></canvas><?php endif; ?></div>
+                </section>
+            </div>
+            <div class="col-12 col-xl-4">
+                <section class="card chart-card h-100" aria-labelledby="studentAttendanceSummaryTitle">
+                    <h2 class="chart-title" id="studentAttendanceSummaryTitle">Ringkasan Kehadiran Siswa</h2>
+                    <p class="chart-subtitle">Status absensi · <?= e($rangeStart) ?> – <?= e($rangeEnd) ?></p>
+                    <div class="donut-layout">
+                        <?php if (array_sum($studentAttendance) === 0): ?><div class="empty-chart empty-chart-plot w-100">
+                                <div class="empty-chart-message"><i class="bi bi-pie-chart" aria-hidden="true"></i><strong>Belum ada catatan</strong><span>Ringkasan terisi setelah absensi siswa dicatat.</span></div>
+                            </div><?php else: ?><div class="chart-canvas"><canvas id="studentDonut" role="img" aria-label="Ringkasan status absensi siswa"></canvas></div>
+                            <ul class="chart-legend" id="studentLegend"></ul><?php endif; ?>
+                    </div>
+                </section>
+            </div>
+        </div><?php endif; ?>
+    <div class="row g-3 mb-3 dashboard-analytics-secondary">
+        <div class="col-12 col-xl-8">
+            <div class="card chart-card h-100">
                 <div>
                     <h2 class="chart-title">Tren Kehadiran Siswa</h2>
                     <div class="chart-subtitle">Persentase hadir harian · <?= e($periodLabels[$period]) ?> · <?= e($rangeStart) ?> sampai <?= e($rangeEnd) ?></div>
                 </div>
-                <div class="chart-canvas"><?php if (!$dailyRows): ?><div class="empty-chart">Belum ada catatan absensi siswa pada periode ini.</div><?php else: ?><canvas id="attendanceTrend"></canvas><?php endif; ?></div>
+                <div class="chart-canvas"><?php if (!$dailyRows): ?><div class="empty-chart empty-chart-plot">
+                            <div class="empty-chart-message"><i class="bi bi-activity" aria-hidden="true"></i><strong>Belum ada tren absensi</strong><span>Grafik akan mengikuti filter periode setelah data kehadiran siswa dicatat.</span></div>
+                        </div><?php else: ?><canvas id="attendanceTrend" role="img" aria-label="Tren persentase kehadiran siswa"></canvas><?php endif; ?></div>
             </div>
         </div>
-        <div class="col-xl-4">
-            <div class="card chart-card">
-                <h2 class="chart-title">Kehadiran Siswa</h2>
-                <div class="chart-subtitle">Rekap status · <?= e($rangeStart) ?> – <?= e($rangeEnd) ?></div>
-                <div class="donut-layout">
-                    <div class="chart-canvas"><?php if (array_sum($studentAttendance) === 0): ?><div class="empty-chart">Belum ada data.</div><?php else: ?><canvas id="studentDonut"></canvas><?php endif; ?></div>
-                    <ul class="chart-legend" id="studentLegend"></ul>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="row g-3 mb-4">
-        <div class="col-xl-4">
-            <div class="card chart-card">
+        <div class="col-12 col-xl-4">
+            <div class="card chart-card h-100">
                 <h2 class="chart-title">Kehadiran Guru</h2>
                 <div class="chart-subtitle">Rekap status · <?= e($rangeStart) ?> – <?= e($rangeEnd) ?></div>
                 <div class="donut-layout">
-                    <div class="chart-canvas"><?php if (array_sum($teacherAttendance) === 0): ?><div class="empty-chart">Belum ada data.</div><?php else: ?><canvas id="teacherDonut"></canvas><?php endif; ?></div>
-                    <ul class="chart-legend" id="teacherLegend"></ul>
+                    <?php if (array_sum($teacherAttendance) === 0): ?><div class="empty-chart empty-chart-plot w-100">
+                            <div class="empty-chart-message"><i class="bi bi-person-check" aria-hidden="true"></i><strong>Belum ada catatan</strong><span>Ringkasan terisi setelah absensi guru dicatat.</span></div>
+                        </div><?php else: ?><div class="chart-canvas"><canvas id="teacherDonut" role="img" aria-label="Ringkasan status absensi guru"></canvas></div>
+                        <ul class="chart-legend" id="teacherLegend"></ul><?php endif; ?>
                 </div>
             </div>
         </div>
-        <div class="col-xl-8">
+    </div>
+    <div class="row g-3 mb-4 dashboard-analytics-tertiary">
+        <div class="col-12">
             <div class="card chart-card">
                 <h2 class="chart-title">Persentase Kehadiran Bulanan</h2>
                 <div class="chart-subtitle">Perbandingan per pekan dalam rentang yang dipilih</div>
-                <div class="chart-canvas compact"><?php if (!$weeklyRates): ?><div class="empty-chart">Belum ada data absensi untuk dibandingkan.</div><?php else: ?><canvas id="weeklyAttendance"></canvas><?php endif; ?></div>
+                <div class="chart-canvas compact"><?php if (!$weeklyRates): ?><div class="empty-chart empty-chart-plot">
+                            <div class="empty-chart-message"><i class="bi bi-calendar-week" aria-hidden="true"></i><strong>Belum ada data mingguan</strong><span>Masukkan catatan absensi untuk membandingkan kehadiran tiap pekan.</span></div>
+                        </div><?php else: ?><canvas id="weeklyAttendance" role="img" aria-label="Perbandingan persentase kehadiran per pekan"></canvas><?php endif; ?></div>
             </div>
         </div>
     </div>
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-4 dashboard-announcement-agenda">
         <div class="col-lg-6">
             <div class="card chart-card">
                 <div class="d-flex justify-content-between align-items-center">
@@ -834,7 +948,7 @@ if ($moduleKey === '') {
         </div>
     </div>
     <?php if (current_role() === 'kepala_sekolah'): ?>
-        <section class="mb-4" aria-labelledby="principal-monitoring-title">
+        <section class="mb-4 dashboard-principal-monitoring" aria-labelledby="principal-monitoring-title">
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-2 mb-3">
                 <div>
                     <h2 class="h4 mb-1" id="principal-monitoring-title">Ringkasan Pemantauan Sekolah</h2>
@@ -845,21 +959,64 @@ if ($moduleKey === '') {
             <div class="row g-3 mb-3">
                 <div class="col-12 col-xl-5">
                     <div class="card chart-card h-100">
-                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2"><div><h3 class="chart-title">Identitas Sekolah</h3><p class="chart-subtitle mb-0">Data profil sekolah yang tercatat.</p></div><?php if (can_view_module('profil_sekolah')): ?><a class="small text-decoration-none" href="index.php?module=profil_sekolah">Lihat profil</a><?php endif; ?></div>
-                        <dl class="principal-school-facts mb-0"><div><dt>Nama sekolah</dt><dd><?= e($principalSchoolProfile['nama'] ?? 'Belum tersedia') ?></dd></div><div><dt>NPSN</dt><dd><?= e($principalSchoolProfile['npsn'] ?: 'Belum tersedia') ?></dd></div><div><dt>Tahun ajaran</dt><dd><?= e($activeYearName !== '' ? $activeYearName : 'Belum diatur') ?></dd></div><div><dt>Alamat</dt><dd><?= e($principalSchoolProfile['alamat'] ?: 'Belum tersedia') ?></dd></div><div><dt>Email sekolah</dt><dd><?= e($principalSchoolProfile['email'] ?: 'Belum tersedia') ?></dd></div></dl>
+                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                            <div>
+                                <h3 class="chart-title">Identitas Sekolah</h3>
+                                <p class="chart-subtitle mb-0">Data profil sekolah yang tercatat.</p>
+                            </div><?php if (can_view_module('profil_sekolah')): ?><a class="small text-decoration-none" href="index.php?module=profil_sekolah">Lihat profil</a><?php endif; ?>
+                        </div>
+                        <dl class="principal-school-facts mb-0">
+                            <div>
+                                <dt>Nama sekolah</dt>
+                                <dd><?= e($principalSchoolProfile['nama'] ?? 'Belum tersedia') ?></dd>
+                            </div>
+                            <div>
+                                <dt>NPSN</dt>
+                                <dd><?= e($principalSchoolProfile['npsn'] ?: 'Belum tersedia') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Tahun ajaran</dt>
+                                <dd><?= e($activeYearName !== '' ? $activeYearName : 'Belum diatur') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Alamat</dt>
+                                <dd><?= e($principalSchoolProfile['alamat'] ?: 'Belum tersedia') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Email sekolah</dt>
+                                <dd><?= e($principalSchoolProfile['email'] ?: 'Belum tersedia') ?></dd>
+                            </div>
+                        </dl>
                         <p class="small text-secondary mt-2 mb-0">Semester aktif dan data status operasional belum tersedia sebagai kolom khusus pada profil sekolah.</p>
                     </div>
                 </div>
                 <div class="col-12 col-xl-7">
                     <div class="card chart-card h-100">
-                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2"><div><h3 class="chart-title">Komposisi Warga Sekolah</h3><p class="chart-subtitle mb-0">Jumlah dari data induk aktif · tahun ajaran <?= e($activeYearName ?: 'belum dipilih') ?>.</p></div></div>
+                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                            <div>
+                                <h3 class="chart-title">Komposisi Warga Sekolah</h3>
+                                <p class="chart-subtitle mb-0">Jumlah dari data induk aktif · tahun ajaran <?= e($activeYearName ?: 'belum dipilih') ?>.</p>
+                            </div>
+                        </div>
                         <div class="row g-2">
-                            <div class="col-6 col-md-3"><div class="principal-mini-stat"><small>Siswa laki-laki</small><strong><?= $principalStudentGender['L'] === null ? 'Belum tersedia' : number_format($principalStudentGender['L'], 0, ',', '.') ?></strong></div></div>
-                            <div class="col-6 col-md-3"><div class="principal-mini-stat"><small>Siswa perempuan</small><strong><?= $principalStudentGender['P'] === null ? 'Belum tersedia' : number_format($principalStudentGender['P'], 0, ',', '.') ?></strong></div></div>
-                            <div class="col-6 col-md-3"><div class="principal-mini-stat"><small>Guru wali kelas</small><strong><?= $principalHomeroomTeachers === null ? 'Belum tersedia' : number_format($principalHomeroomTeachers, 0, ',', '.') ?></strong></div></div>
-                            <div class="col-6 col-md-3"><div class="principal-mini-stat"><small>Mata pelajaran</small><strong><?= number_format($subjectTotal, 0, ',', '.') ?></strong></div></div>
-                            <div class="col-6 col-md-3"><div class="principal-mini-stat"><small>Guru laki-laki</small><strong><?= $principalTeacherGender['L'] === null ? 'Belum tersedia' : number_format($principalTeacherGender['L'], 0, ',', '.') ?></strong></div></div>
-                            <div class="col-6 col-md-3"><div class="principal-mini-stat"><small>Guru perempuan</small><strong><?= $principalTeacherGender['P'] === null ? 'Belum tersedia' : number_format($principalTeacherGender['P'], 0, ',', '.') ?></strong></div></div>
+                            <div class="col-6 col-md-3">
+                                <div class="principal-mini-stat"><small>Siswa laki-laki</small><strong><?= $principalStudentGender['L'] === null ? 'Belum tersedia' : number_format($principalStudentGender['L'], 0, ',', '.') ?></strong></div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="principal-mini-stat"><small>Siswa perempuan</small><strong><?= $principalStudentGender['P'] === null ? 'Belum tersedia' : number_format($principalStudentGender['P'], 0, ',', '.') ?></strong></div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="principal-mini-stat"><small>Guru wali kelas</small><strong><?= $principalHomeroomTeachers === null ? 'Belum tersedia' : number_format($principalHomeroomTeachers, 0, ',', '.') ?></strong></div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="principal-mini-stat"><small>Mata pelajaran</small><strong><?= number_format($subjectTotal, 0, ',', '.') ?></strong></div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="principal-mini-stat"><small>Guru laki-laki</small><strong><?= $principalTeacherGender['L'] === null ? 'Belum tersedia' : number_format($principalTeacherGender['L'], 0, ',', '.') ?></strong></div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="principal-mini-stat"><small>Guru perempuan</small><strong><?= $principalTeacherGender['P'] === null ? 'Belum tersedia' : number_format($principalTeacherGender['P'], 0, ',', '.') ?></strong></div>
+                            </div>
                         </div>
                         <p class="small text-secondary mt-3 mb-0">Jumlah tenaga kependidikan/staf belum dapat diringkas karena SIMS belum memiliki data induk staf terpisah.</p>
                         <div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-sm btn-outline-primary" href="reports.php?type=siswa"><i class="bi bi-people me-1"></i>Data siswa</a><a class="btn btn-sm btn-outline-primary" href="reports.php?type=guru"><i class="bi bi-person-badge me-1"></i>Data guru</a><a class="btn btn-sm btn-outline-primary" href="reports.php?type=kelas"><i class="bi bi-door-open me-1"></i>Data kelas</a></div>
@@ -867,23 +1024,40 @@ if ($moduleKey === '') {
                 </div>
             </div>
             <div class="row g-3 mb-3" aria-label="Ringkasan kehadiran hari ini">
-                <?php $studentMarkedToday = array_sum($principalTodayStudentAttendance); $teacherMarkedToday = array_sum($principalTodayTeacherAttendance); ?>
+                <?php $studentMarkedToday = array_sum($principalTodayStudentAttendance);
+                $teacherMarkedToday = array_sum($principalTodayTeacherAttendance); ?>
                 <?php foreach ([['Kehadiran Siswa · hari ini', $principalTodayStudentAttendance, $totalStudents, $studentMarkedToday, 'reports.php?type=absensi'], ['Kehadiran Guru · hari ini', $principalTodayTeacherAttendance, $teacherTotal, $teacherMarkedToday, 'reports.php?type=absensi_guru']] as [$attendanceTitle, $attendanceCounts, $expectedCount, $markedCount, $attendanceLink]): ?>
-                    <div class="col-12 col-xl-6"><div class="card chart-card h-100"><div class="d-flex justify-content-between align-items-start gap-2"><div><h3 class="chart-title"><?= e($attendanceTitle) ?></h3><p class="chart-subtitle">Hanya catatan absensi yang sudah dimasukkan per <?= e($today->format('d/m/Y')) ?>.</p></div><a class="small text-decoration-none" href="<?= e($attendanceLink) ?>">Lihat laporan</a></div>
-                        <?php if (!$principalAttendanceDataAvailable): ?><div class="empty-state">Data kehadiran hari ini belum tersedia.</div><?php else: ?><div class="principal-attendance-summary"><?php foreach (['Hadir','Izin','Sakit','Alpa'] as $attendanceStatus): ?><div><small><?= e($attendanceStatus) ?></small><strong><?= number_format($attendanceCounts[$attendanceStatus], 0, ',', '.') ?></strong></div><?php endforeach; ?><div class="is-pending"><small>Belum tercatat*</small><strong><?= number_format(max(0, $expectedCount - $markedCount), 0, ',', '.') ?></strong></div></div><p class="small text-secondary mb-0 mt-2">*Perkiraan selisih jumlah data induk aktif dengan catatan hari ini; periksa laporan untuk tindak lanjut.</p><?php endif; ?>
-                    </div></div>
+                    <div class="col-12 col-xl-6">
+                        <div class="card chart-card h-100">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div>
+                                    <h3 class="chart-title"><?= e($attendanceTitle) ?></h3>
+                                    <p class="chart-subtitle">Hanya catatan absensi yang sudah dimasukkan per <?= e($today->format('d/m/Y')) ?>.</p>
+                                </div><a class="small text-decoration-none" href="<?= e($attendanceLink) ?>">Lihat laporan</a>
+                            </div>
+                            <?php if (!$principalAttendanceDataAvailable): ?><div class="empty-state">Data kehadiran hari ini belum tersedia.</div><?php else: ?><div class="principal-attendance-summary"><?php foreach (['Hadir', 'Izin', 'Sakit', 'Alpa'] as $attendanceStatus): ?><div><small><?= e($attendanceStatus) ?></small><strong><?= number_format($attendanceCounts[$attendanceStatus], 0, ',', '.') ?></strong></div><?php endforeach; ?><div class="is-pending"><small>Belum tercatat*</small><strong><?= number_format(max(0, $expectedCount - $markedCount), 0, ',', '.') ?></strong></div>
+                                </div>
+                                <p class="small text-secondary mb-0 mt-2">*Perkiraan selisih jumlah data induk aktif dengan catatan hari ini; periksa laporan untuk tindak lanjut.</p><?php endif; ?>
+                        </div>
+                    </div>
                 <?php endforeach; ?>
             </div>
             <div class="row g-3 mb-3" aria-label="Daftar tindak lanjut kepala sekolah">
-                <?php foreach ([
-                    ['Nilai belum diterbitkan', $principalUnpublishedGrades, 'bi-journal-x', 'reports.php?type=nilai', 'Tahun ajaran terpilih'],
-                    ['Tugas menunggu penilaian', $principalPendingTaskReviews, 'bi-clipboard2-check', 'reports.php?type=pengumpulan&status=belum', 'Tugas terbit tanpa nilai'],
-                    ['Kelas tanpa jadwal', $principalClassesWithoutSchedule, 'bi-calendar-x', 'reports.php?type=jadwal', 'Tahun ajaran terpilih'],
-                    ['Materi masih draf', $principalDraftMaterials, 'bi-file-earmark-text', 'reports.php?type=materi&status=Draft', 'Perlu ditinjau guru'],
-                    ['Biodata perlu pemeriksaan', $principalPendingBiodata, 'bi-person-check', '', 'Perlu ditindaklanjuti Operator'],
-                    ['Kelas tanpa wali', $principalUnassignedClasses, 'bi-people', 'reports.php?type=kelas', 'Tahun ajaran terpilih'],
-                ] as [$actionLabel, $actionValue, $actionIcon, $actionUrl, $actionNote]): ?>
-                    <div class="col-6 col-xl-4"><article class="card principal-action-card h-100"><span class="principal-action-icon"><i class="bi <?= e($actionIcon) ?>"></i></span><div><span class="principal-action-label"><?= e($actionLabel) ?></span><strong><?= $actionValue === null ? 'Belum tersedia' : number_format((int)$actionValue, 0, ',', '.') ?></strong><small><?= e($actionNote) ?></small></div><?php if ($actionUrl !== ''): ?><a href="<?= e($actionUrl) ?>" aria-label="Buka <?= e($actionLabel) ?>"><i class="bi bi-arrow-up-right"></i></a><?php endif; ?></article></div>
+                <?php foreach (
+                    [
+                        ['Nilai belum diterbitkan', $principalUnpublishedGrades, 'bi-journal-x', 'reports.php?type=nilai', 'Tahun ajaran terpilih'],
+                        ['Tugas menunggu penilaian', $principalPendingTaskReviews, 'bi-clipboard2-check', 'reports.php?type=pengumpulan&status=belum', 'Tugas terbit tanpa nilai'],
+                        ['Kelas tanpa jadwal', $principalClassesWithoutSchedule, 'bi-calendar-x', 'reports.php?type=jadwal', 'Tahun ajaran terpilih'],
+                        ['Materi masih draf', $principalDraftMaterials, 'bi-file-earmark-text', 'reports.php?type=materi&status=Draft', 'Perlu ditinjau guru'],
+                        ['Biodata perlu pemeriksaan', $principalPendingBiodata, 'bi-person-check', '', 'Perlu ditindaklanjuti Operator'],
+                        ['Kelas tanpa wali', $principalUnassignedClasses, 'bi-people', 'reports.php?type=kelas', 'Tahun ajaran terpilih'],
+                    ] as [$actionLabel, $actionValue, $actionIcon, $actionUrl, $actionNote]
+                ): ?>
+                    <div class="col-6 col-xl-4">
+                        <article class="card principal-action-card h-100"><span class="principal-action-icon"><i class="bi <?= e($actionIcon) ?>"></i></span>
+                            <div><span class="principal-action-label"><?= e($actionLabel) ?></span><strong><?= $actionValue === null ? 'Belum tersedia' : number_format((int)$actionValue, 0, ',', '.') ?></strong><small><?= e($actionNote) ?></small></div><?php if ($actionUrl !== ''): ?><a href="<?= e($actionUrl) ?>" aria-label="Buka <?= e($actionLabel) ?>"><i class="bi bi-arrow-up-right"></i></a><?php endif; ?>
+                        </article>
+                    </div>
                 <?php endforeach; ?>
             </div>
             <div class="row g-3 mb-3">
@@ -928,8 +1102,32 @@ if ($moduleKey === '') {
             <div class="row g-3">
                 <div class="col-12">
                     <div class="card chart-card">
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><div><h3 class="chart-title">Jadwal Pelajaran Hari Ini</h3><p class="chart-subtitle mb-0"><?= e($principalWeekdays[(int)$today->format('N')] ?? '') ?> · <?= e($today->format('d/m/Y')) ?> · sumber: jadwal kelas.</p></div><a class="small text-decoration-none" href="reports.php?type=jadwal">Lihat jadwal lengkap</a></div>
-                        <?php if (!$principalTodaySchedule): ?><div class="empty-state">Belum ada jadwal yang tercatat untuk hari ini.</div><?php else: ?><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Waktu</th><th>Kelas</th><th>Mata pelajaran</th><th>Guru</th><th>Ruang</th></tr></thead><tbody><?php foreach ($principalTodaySchedule as $schedule): ?><tr><td class="text-nowrap"><?= e(substr((string)$schedule['jam_mulai'], 0, 5)) ?>–<?= e(substr((string)$schedule['jam_selesai'], 0, 5)) ?></td><td><?= e($schedule['nama_kelas']) ?></td><td><?= e($schedule['nama_mapel']) ?></td><td><?= e($schedule['guru'] ?: 'Belum ditentukan') ?></td><td><?= e($schedule['ruang'] ?: '—') ?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <div>
+                                <h3 class="chart-title">Jadwal Pelajaran Hari Ini</h3>
+                                <p class="chart-subtitle mb-0"><?= e($principalWeekdays[(int)$today->format('N')] ?? '') ?> · <?= e($today->format('d/m/Y')) ?> · sumber: jadwal kelas.</p>
+                            </div><a class="small text-decoration-none" href="reports.php?type=jadwal">Lihat jadwal lengkap</a>
+                        </div>
+                        <?php if (!$principalTodaySchedule): ?><div class="empty-state">Belum ada jadwal yang tercatat untuk hari ini.</div><?php else: ?><div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Waktu</th>
+                                            <th>Kelas</th>
+                                            <th>Mata pelajaran</th>
+                                            <th>Guru</th>
+                                            <th>Ruang</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody><?php foreach ($principalTodaySchedule as $schedule): ?><tr>
+                                                <td class="text-nowrap"><?= e(substr((string)$schedule['jam_mulai'], 0, 5)) ?>–<?= e(substr((string)$schedule['jam_selesai'], 0, 5)) ?></td>
+                                                <td><?= e($schedule['nama_kelas']) ?></td>
+                                                <td><?= e($schedule['nama_mapel']) ?></td>
+                                                <td><?= e($schedule['guru'] ?: 'Belum ditentukan') ?></td>
+                                                <td><?= e($schedule['ruang'] ?: '—') ?></td>
+                                            </tr><?php endforeach; ?></tbody>
+                                </table>
+                            </div><?php endif; ?>
                     </div>
                 </div>
                 <div class="col-12 col-xl-8">
@@ -987,8 +1185,17 @@ if ($moduleKey === '') {
                 </div>
                 <div class="col-12 col-md-8">
                     <div class="card chart-card h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-2"><div><h3 class="chart-title">Pengajuan Rencana Ajar</h3><p class="chart-subtitle mb-0">Pengajuan guru yang perlu ditinjau.</p></div><?php if (can_view_module('rencana_ajar')): ?><a class="small text-decoration-none" href="index.php?module=rencana_ajar">Buka semua</a><?php endif; ?></div>
-                        <?php if (!$principalSubmittedPlans): ?><div class="empty-state">Tidak ada pengajuan rencana ajar yang menunggu tinjauan.</div><?php else: ?><div class="principal-activity-list"><?php foreach ($principalSubmittedPlans as $plan): ?><article><span class="principal-activity-dot" aria-hidden="true"></span><div><strong><?= e($plan['judul']) ?></strong><small><?= e($plan['guru']) ?> · <?= e($plan['nama_kelas']) ?> · <?= e($plan['nama_mapel']) ?></small><p>Semester <?= e($plan['semester'] === '1' ? 'Ganjil' : 'Genap') ?></p></div></article><?php endforeach; ?></div><?php endif; ?>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <h3 class="chart-title">Pengajuan Rencana Ajar</h3>
+                                <p class="chart-subtitle mb-0">Pengajuan guru yang perlu ditinjau.</p>
+                            </div><?php if (can_view_module('rencana_ajar')): ?><a class="small text-decoration-none" href="index.php?module=rencana_ajar">Buka semua</a><?php endif; ?>
+                        </div>
+                        <?php if (!$principalSubmittedPlans): ?><div class="empty-state">Tidak ada pengajuan rencana ajar yang menunggu tinjauan.</div><?php else: ?><div class="principal-activity-list"><?php foreach ($principalSubmittedPlans as $plan): ?><article><span class="principal-activity-dot" aria-hidden="true"></span>
+                                        <div><strong><?= e($plan['judul']) ?></strong><small><?= e($plan['guru']) ?> · <?= e($plan['nama_kelas']) ?> · <?= e($plan['nama_mapel']) ?></small>
+                                            <p>Semester <?= e($plan['semester'] === '1' ? 'Ganjil' : 'Genap') ?></p>
+                                        </div>
+                                    </article><?php endforeach; ?></div><?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -1028,7 +1235,7 @@ if ($moduleKey === '') {
             </div>
         </section>
     <?php endif; ?>
-    <?php if (can_view_module('kelas_berlangsung')): ?><div class="card chart-card mb-4">
+    <?php if (can_view_module('kelas_berlangsung')): ?><div class="card chart-card mb-4 dashboard-class-sessions">
             <div class="d-flex justify-content-between align-items-center">
                 <h2 class="chart-title">Kelas Berlangsung / Terjadwal</h2><a class="small text-decoration-none" href="index.php?module=kelas_berlangsung">Kelola kelas</a>
             </div><?php $stmt = $pdo->prepare("SELECT kb.tanggal,k.nama_kelas,m.nama_mapel,g.nama AS guru,kb.materi,kb.status FROM kelas_berlangsung kb JOIN kelas k ON k.id=kb.kelas_id JOIN mapel m ON m.id=kb.mapel_id LEFT JOIN guru g ON g.id=kb.guru_id WHERE kb.tanggal BETWEEN ? AND ? ORDER BY kb.tanggal DESC LIMIT 5");
@@ -1072,8 +1279,12 @@ if ($moduleKey === '') {
                 const weekRates = <?= json_encode($weeklyRates, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
                 const gradeLabels = <?= json_encode(array_map(static fn($row) => $row['tahun_ajaran'] . ' · Semester ' . $row['semester'], $gradeTrendRows), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
                 const gradeValues = <?= json_encode(array_map(static fn($row) => $row['rata_rata'] === null ? null : (float)$row['rata_rata'], $gradeTrendRows), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                const intakeLabels = <?= json_encode($studentTrendLabels, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                const intakeNewValues = <?= json_encode($studentTrendNew, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                const intakeTotalValues = <?= json_encode($studentTrendTotal, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
                 if (typeof Chart === 'undefined') return;
                 Chart.defaults.font.family = "'DM Sans', sans-serif";
+                Chart.defaults.color = '#dce8f8';
                 const donut = (id, legendId, data) => {
                     const el = document.getElementById(id);
                     if (!el) return;
@@ -1134,7 +1345,7 @@ if ($moduleKey === '') {
                                         callback: v => v + '%'
                                     },
                                     grid: {
-                                        color: '#edf1f6'
+                                        color: 'rgba(151,177,214,.16)'
                                     }
                                 },
                                 x: {
@@ -1178,7 +1389,7 @@ if ($moduleKey === '') {
                                         callback: v => v + '%'
                                     },
                                     grid: {
-                                        color: '#edf1f6'
+                                        color: 'rgba(151,177,214,.16)'
                                     }
                                 },
                                 x: {
@@ -1199,6 +1410,86 @@ if ($moduleKey === '') {
                             }
                         }
                     })
+                    const intake = document.getElementById('studentIntakeTrend');
+                    if (intake) new Chart(intake, {
+                        type: 'bar',
+                        data: {
+                            labels: intakeLabels,
+                            datasets: [{
+                                type: 'bar',
+                                label: 'Data baru dicatat',
+                                data: intakeNewValues,
+                                backgroundColor: 'rgba(47,148,255,.64)',
+                                hoverBackgroundColor: '#2f94ff',
+                                borderRadius: 5,
+                                maxBarThickness: 25,
+                                yAxisID: 'y'
+                            }, {
+                                type: 'line',
+                                label: 'Akumulasi data siswa',
+                                data: intakeTotalValues,
+                                borderColor: '#9b72ff',
+                                backgroundColor: 'rgba(155,114,255,.14)',
+                                pointBackgroundColor: '#d2c1ff',
+                                pointBorderColor: '#9b72ff',
+                                pointRadius: 3,
+                                borderWidth: 3,
+                                tension: .35,
+                                fill: true,
+                                yAxisID: 'y'
+                            }]
+                        },
+                        options: {
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0,
+                                        color: '#b9c9e0'
+                                    },
+                                    grid: {
+                                        color: 'rgba(151,177,214,.15)'
+                                    },
+                                    border: {
+                                        display: false
+                                    }
+                                },
+                                x: {
+                                    ticks: {
+                                        color: '#b9c9e0',
+                                        maxRotation: 0,
+                                        autoSkip: true,
+                                        maxTicksLimit: 12
+                                    },
+                                    grid: {
+                                        color: 'rgba(151,177,214,.08)'
+                                    },
+                                    border: {
+                                        display: false
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    align: 'start',
+                                    labels: {
+                                        color: '#dce8f8',
+                                        usePointStyle: true,
+                                        boxWidth: 8,
+                                        boxHeight: 8
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: context => `${context.dataset.label}: ${context.raw} siswa`
+                                    }
+                                }
+                            }
+                        }
+                    });
                     const grade = document.getElementById('principalGradeTrend');
                     if (grade) new Chart(grade, {
                         type: 'line',
@@ -1274,7 +1565,14 @@ $migrationRequirements = [
     'galeri_sekolah' => ['galeri_sekolah' => ['id', 'judul', 'keterangan', 'gambar_url', 'tanggal_kegiatan', 'status', 'created_at', 'review_status']],
     'pengumuman' => ['pengumuman' => ['review_status']],
     'kalender_akademik' => ['kalender_akademik' => ['tampil_publik', 'review_status', 'created_by']],
-    'profil_sekolah' => ['profil_sekolah' => ['sejarah', 'visi', 'misi', 'sambutan', 'jam_layanan', 'peta_url']],
+    'profil_sekolah' => ['profil_sekolah' => ['sejarah', 'sejarah_status', 'visi', 'misi', 'sambutan', 'jam_layanan', 'peta_url', 'alamat_jalan', 'kampung', 'distrik', 'kabupaten', 'provinsi', 'kode_pos', 'jenjang', 'status_sekolah', 'naungan', 'akreditasi', 'akreditasi_status', 'visi_status', 'misi_status', 'tujuan', 'tujuan_status']],
+    'portal_ekstrakurikuler' => ['portal_ekstrakurikuler' => ['nama', 'kategori', 'deskripsi', 'pembina', 'jadwal', 'persyaratan', 'status', 'urutan']],
+    'portal_fasilitas' => ['portal_fasilitas' => ['nama', 'deskripsi', 'gambar_url', 'status', 'urutan']],
+    'portal_struktur_sekolah' => ['portal_struktur_sekolah' => ['nama', 'jabatan', 'foto_url', 'status', 'urutan']],
+    'portal_prestasi_publik' => ['portal_prestasi_publik' => ['judul', 'penerima', 'bukti_terverifikasi', 'izin_publikasi', 'status']],
+    'portal_jadwal_publik' => ['portal_jadwal_publik' => ['tahun_ajaran', 'tingkat', 'hari', 'jam_mulai', 'jam_selesai', 'mata_pelajaran', 'status']],
+    'portal_dokumen_publik' => ['portal_dokumen_publik' => ['judul', 'kategori', 'deskripsi', 'nama_file', 'status', 'published_at']],
+    'portal_tautan_sosial' => ['portal_tautan_sosial' => ['platform', 'url', 'status']],
 ];
 $missingPortalSchema = [];
 foreach (($migrationRequirements[$moduleKey] ?? []) as $requiredTable => $requiredColumns) {
@@ -1354,13 +1652,39 @@ function portal_store_upload(array $upload): array
     if (!move_uploaded_file($tmp, $directory . '/' . $filename)) return [null, 'Gambar gagal disimpan. Periksa izin folder uploads/portal.'];
     return ['uploads/portal/' . $filename, null];
 }
-function portal_remove_upload(mixed $path): void
+function portal_remove_stored_asset(mixed $path): void
 {
     $path = (string)$path;
-    if (!preg_match('~^uploads/portal/([a-f0-9]{40}\.(?:jpg|png|webp))$~i', $path, $match)) return;
-    $root = realpath(__DIR__ . '/uploads/portal');
+    if (preg_match('~^uploads/portal/([a-f0-9]{40}\.(?:jpg|png|webp))$~i', $path, $match)) {
+        $root = realpath(__DIR__ . '/uploads/portal');
+    } elseif (preg_match('~^storage/public_documents/([a-f0-9]{40}\.pdf)$~i', $path, $match)) {
+        $root = realpath(__DIR__ . '/storage/public_documents');
+    } else {
+        return;
+    }
     $file = $root ? realpath($root . DIRECTORY_SEPARATOR . $match[1]) : false;
     if ($root && $file && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_file($file)) @unlink($file);
+}
+function portal_store_pdf(array $upload): array
+{
+    $uploadError = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        if (in_array($uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) return [null, 'Ukuran dokumen melebihi batas unggah server. Batas aplikasi 10 MB.'];
+        return [null, 'Unggahan PDF tidak berhasil. Pilih dokumen kembali.'];
+    }
+    $tmp = (string)($upload['tmp_name'] ?? '');
+    $size = (int)($upload['size'] ?? 0);
+    if (!is_uploaded_file($tmp) || $size < 8 || $size > 10 * 1024 * 1024) return [null, 'PDF harus berupa unggahan valid dengan ukuran maksimal 10 MB.'];
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmp);
+    $handle = @fopen($tmp, 'rb');
+    $signature = $handle ? fread($handle, 5) : '';
+    if ($handle) fclose($handle);
+    if ($mime !== 'application/pdf' || $signature !== '%PDF-') return [null, 'Dokumen harus berupa file PDF yang valid.'];
+    $directory = __DIR__ . '/storage/public_documents';
+    if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) return [null, 'Folder dokumen publik tidak dapat dibuat.'];
+    $filename = bin2hex(random_bytes(20)) . '.pdf';
+    if (!move_uploaded_file($tmp, $directory . '/' . $filename)) return [null, 'PDF gagal disimpan. Periksa izin folder dokumen publik.'];
+    return ['storage/public_documents/' . $filename, null];
 }
 function relation_options(PDO $pdo, string $relation): array
 {
@@ -1379,9 +1703,10 @@ function render_input(string $key, array $field, mixed $value = '', array $optio
     $type = $field['type'] ?? 'text';
     $label = $field['label'] ?? field_label($key);
     $required = !empty($field['required']);
+    if ($type === 'date' && is_string($value) && strlen($value) >= 10) $value = substr($value, 0, 10);
     echo '<div class="col-md-6 mb-3"><label class="form-label' . ($required ? ' required' : '') . '" for="' . e($key) . '">' . e($label) . '</label>';
     if ($type === 'textarea') {
-        echo '<textarea class="form-control" id="' . e($key) . '" name="' . e($key) . '" rows="3">' . e($value) . '</textarea>';
+        echo '<textarea class="form-control" id="' . e($key) . '" name="' . e($key) . '" rows="3"' . (isset($field['maxlength']) ? ' maxlength="' . (int)$field['maxlength'] . '"' : '') . '>' . e($value) . '</textarea>';
     } elseif ($type === 'image_upload') {
         $hasStoredUpload = is_string($value) && preg_match('~^uploads/portal/[a-f0-9]{40}\.(?:jpg|png|webp)$~i', $value);
         echo '<input class="form-control" id="' . e($key) . '" name="' . e($key) . '" type="file" accept="image/jpeg,image/png,image/webp"' . ($required && !$hasStoredUpload ? ' required' : '') . '>';
@@ -1390,6 +1715,11 @@ function render_input(string $key, array $field, mixed $value = '', array $optio
             $entityId = (int)($_GET['id'] ?? 0);
             if ($entityId > 0) echo '<div class="mt-2"><img src="media/portal.php?type=' . e($field['media_type']) . '&id=' . $entityId . '" alt="Pratinjau gambar saat ini" style="max-width:240px;max-height:160px;object-fit:cover;border-radius:8px"></div>';
         }
+    } elseif ($type === 'pdf_upload') {
+        $hasStoredPdf = is_string($value) && preg_match('~^storage/public_documents/[a-f0-9]{40}\.pdf$~i', $value);
+        echo '<input class="form-control" id="' . e($key) . '" name="' . e($key) . '" type="file" accept="application/pdf,.pdf"' . ($required && !$hasStoredPdf ? ' required' : '') . '>';
+        echo '<div class="form-text">PDF resmi saja, maksimal 10 MB. Jangan unggah data pribadi pendaftar atau siswa.</div>';
+        if ($hasStoredPdf) echo '<div class="form-text">Dokumen tersimpan: ' . e(basename((string)$value)) . '. Unggah berkas baru untuk menggantinya.</div>';
     } elseif ($type === 'select') {
         echo '<select class="form-select" id="' . e($key) . '" name="' . e($key) . '"' . ($required ? ' required' : '') . '><option value="">-- Pilih --</option>';
         foreach (($options ?: ($field['options'] ?? [])) as $optVal => $optLabel) {
@@ -1401,7 +1731,7 @@ function render_input(string $key, array $field, mixed $value = '', array $optio
         echo '</select>';
     } else {
         $htmlType = in_array($type, ['number', 'date', 'time', 'email'], true) ? $type : 'text';
-        echo '<input class="form-control" id="' . e($key) . '" name="' . e($key) . '" type="' . $htmlType . '" value="' . e($value) . '"' . ($required ? ' required' : '');
+        echo '<input class="form-control" id="' . e($key) . '" name="' . e($key) . '" type="' . $htmlType . '" value="' . e($value) . '"' . ($required ? ' required' : '') . (isset($field['maxlength']) ? ' maxlength="' . (int)$field['maxlength'] . '"' : '');
         if (isset($field['min'])) echo ' min="' . e($field['min']) . '"';
         if (isset($field['max'])) echo ' max="' . e($field['max']) . '"';
         if ($htmlType === 'number') echo ' step="' . e($field['step'] ?? '0.01') . '"';
@@ -1413,7 +1743,7 @@ function render_input(string $key, array $field, mixed $value = '', array $optio
 if ($action === 'delete' && $id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
     try {
-        $imageToRemove = null;
+        $assetsToRemove = [];
         if ($isOperatorAuthor && in_array('created_by', $editorialColumns, true)) {
             $owner = $pdo->prepare("SELECT created_by FROM `$table` WHERE `$pk`=?");
             $owner->execute([$id]);
@@ -1422,14 +1752,16 @@ if ($action === 'delete' && $id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit('Anda hanya dapat menghapus konten yang dibuat oleh akun Anda.');
             }
         }
-        if (in_array($moduleKey, ['berita_sekolah', 'galeri_sekolah'], true)) {
-            $imageLookup = $pdo->prepare("SELECT gambar_url FROM `$table` WHERE `$pk`=?");
-            $imageLookup->execute([$id]);
-            $imageToRemove = $imageLookup->fetchColumn() ?: null;
+        $uploadFields = array_filter($fields, static fn(array $field): bool => in_array(($field['type'] ?? ''), ['image_upload', 'pdf_upload'], true));
+        if ($uploadFields) {
+            $assetColumns = array_keys($uploadFields);
+            $assetLookup = $pdo->prepare("SELECT `" . implode('`,`', $assetColumns) . "` FROM `$table` WHERE `$pk`=?");
+            $assetLookup->execute([$id]);
+            $assetsToRemove = array_values(array_filter($assetLookup->fetch() ?: []));
         }
         $stmt = $pdo->prepare("DELETE FROM `$table` WHERE `$pk` = ?");
         $stmt->execute([$id]);
-        if ($imageToRemove !== null) portal_remove_upload($imageToRemove);
+        foreach ($assetsToRemove as $storedAsset) portal_remove_stored_asset($storedAsset);
         record_activity($pdo, 'hapus', $table, $id);
         flash('Data berhasil dihapus.');
     } catch (PDOException $ex) {
@@ -1460,15 +1792,18 @@ if (in_array($action, ['create', 'edit'], true)) {
         $oldUploads = [];
         foreach ($fields as $key => $field) {
             if ($isOperatorAuthor && ($key === 'tampil_publik' || ($key === 'status' && $moduleKey !== 'kalender_akademik'))) continue;
-            if (($field['type'] ?? '') === 'image_upload') {
+            if (in_array(($field['type'] ?? ''), ['image_upload', 'pdf_upload'], true)) {
                 $existing = (string)($record[$key] ?? '');
                 $upload = $_FILES[$key] ?? ['error' => UPLOAD_ERR_NO_FILE];
-                $hasExistingUpload = (bool)preg_match('~^uploads/portal/[a-f0-9]{40}\.(?:jpg|png|webp)$~i', $existing);
+                $isPdf = ($field['type'] ?? '') === 'pdf_upload';
+                $hasExistingUpload = $isPdf
+                    ? (bool)preg_match('~^storage/public_documents/[a-f0-9]{40}\.pdf$~i', $existing)
+                    : (bool)preg_match('~^uploads/portal/[a-f0-9]{40}\.(?:jpg|png|webp)$~i', $existing);
                 if (($upload['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
                     if (!empty($field['required']) && !$hasExistingUpload) $error = 'Silakan unggah ' . strtolower($field['label'] ?? 'gambar') . ' melalui formulir ini.';
                     $values[$key] = $existing === '' ? null : $existing;
                 } else {
-                    [$storedImage, $uploadError] = portal_store_upload($upload);
+                    [$storedImage, $uploadError] = $isPdf ? portal_store_pdf($upload) : portal_store_upload($upload);
                     if ($uploadError !== null) {
                         $error = $uploadError;
                         $values[$key] = $existing === '' ? null : $existing;
@@ -1481,6 +1816,7 @@ if (in_array($action, ['create', 'edit'], true)) {
                 continue;
             }
             $value = get_form_value($field, $key);
+            if (isset($field['maxlength']) && mb_strlen($value, 'UTF-8') > (int)$field['maxlength']) $error = 'Kolom ' . ($field['label'] ?? $key) . ' terlalu panjang.';
             if (!empty($field['required']) && $value === '') $error = 'Kolom ' . ($field['label'] ?? $key) . ' wajib diisi.';
             if (($field['type'] ?? '') === 'number' && $value !== '' && !is_numeric($value)) $error = 'Kolom angka tidak valid.';
             if (($field['type'] ?? '') === 'date' && $value !== '') {
@@ -1530,6 +1866,39 @@ if (in_array($action, ['create', 'edit'], true)) {
             $endKey = $moduleKey === 'pengumuman' ? 'selesai_tayang' : 'tanggal_selesai';
             if (!empty($values[$startKey]) && !empty($values[$endKey]) && $values[$startKey] > $values[$endKey]) $error = 'Tanggal mulai tidak boleh melewati tanggal selesai.';
         }
+        if ($error === '' && in_array($moduleKey, ['portal_fasilitas', 'portal_prestasi_publik', 'portal_dokumen_publik'], true) && ($values['status'] ?? '') === 'Terbit') {
+            if ($moduleKey === 'portal_fasilitas' && empty($values['gambar_url'])) $error = 'Unggah foto aktual sebelum fasilitas diterbitkan.';
+            if ($moduleKey === 'portal_prestasi_publik' && ((string)($values['bukti_terverifikasi'] ?? '0') !== '1' || (string)($values['izin_publikasi'] ?? '0') !== '1')) {
+                $error = 'Prestasi hanya dapat diterbitkan setelah bukti diverifikasi dan izin publikasi diperoleh.';
+            }
+            if ($moduleKey === 'portal_dokumen_publik') {
+                $storedPdf = (string)($values['nama_file'] ?? '');
+                if (!preg_match('~^storage/public_documents/[a-f0-9]{40}\.pdf$~i', $storedPdf)) {
+                    $error = 'Unggah dokumen PDF resmi sebelum menerbitkannya.';
+                } elseif (empty($values['published_at'])) {
+                    $values['published_at'] = date('Y-m-d 00:00:00');
+                }
+            }
+        }
+        if ($error === '' && $moduleKey === 'portal_tautan_sosial') {
+            $socialUrl = (string)($values['url'] ?? '');
+            $socialPlatform = (string)($values['platform'] ?? '');
+            $host = strtolower((string)parse_url($socialUrl, PHP_URL_HOST));
+            $hostAllowlist = [
+                'facebook' => ['facebook.com', 'www.facebook.com', 'm.facebook.com'],
+                'instagram' => ['instagram.com', 'www.instagram.com'],
+                'youtube' => ['youtube.com', 'www.youtube.com', 'youtu.be'],
+                'tiktok' => ['tiktok.com', 'www.tiktok.com'],
+                'twitter-x' => ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'],
+            ];
+            if (!filter_var($socialUrl, FILTER_VALIDATE_URL) || strtolower((string)parse_url($socialUrl, PHP_URL_SCHEME)) !== 'https'
+                || !in_array($host, $hostAllowlist[$socialPlatform] ?? [], true)) {
+                $error = 'Gunakan URL HTTPS dari domain resmi platform media sosial yang dipilih.';
+            }
+        }
+        if ($error === '' && $moduleKey === 'portal_jadwal_publik' && $values['jam_mulai'] >= $values['jam_selesai']) {
+            $error = 'Jam mulai harus lebih awal daripada jam selesai.';
+        }
         if ($error === '' && $moduleKey === 'jadwal' && $values['jam_mulai'] >= $values['jam_selesai']) $error = 'Jam mulai harus lebih awal dari jam selesai.';
         if ($moduleKey === 'nilai' && isset($values['nilai_uas'])) {
             // Simpan juga ke kolom lama agar laporan/integrasi sebelumnya tetap kompatibel.
@@ -1548,7 +1917,15 @@ if (in_array($action, ['create', 'edit'], true)) {
                     $stmt = $pdo->prepare($sql);
                     $stmt->execute(array_values($values));
                     $savedId = (int)$pdo->lastInsertId();
-                    record_activity($pdo, 'tambah', $table, $savedId);
+                    $isPortalRecord = str_starts_with($moduleKey, 'portal_');
+                    $createdStatus = (string) ($values['status'] ?? '');
+                    record_activity(
+                        $pdo,
+                        $isPortalRecord ? ($createdStatus === 'Terbit' ? 'menerbitkan konten publik' : 'menambah konten portal') : 'tambah',
+                        $table,
+                        $savedId,
+                        $isPortalRecord ? $createdStatus : null
+                    );
                     if ($isEditorialContent && isset($values['review_status'])) {
                         $reviewLog = $pdo->prepare('INSERT INTO konten_review_log (entitas,record_id,status_awal,status_akhir,catatan,user_id) VALUES (?,?,NULL,?,?,?)');
                         $reviewLog->execute([$moduleKey, $savedId, $values['review_status'], null, (int)$_SESSION['user_id']]);
@@ -1571,7 +1948,19 @@ if (in_array($action, ['create', 'edit'], true)) {
                     $sql = "UPDATE `$table` SET " . implode(', ', $sets) . " WHERE `$pk` = ?";
                     $stmt = $pdo->prepare($sql);
                     $stmt->execute([...array_values($values), $id]);
-                    record_activity($pdo, 'ubah', $table, $id);
+                    $isPortalRecord = str_starts_with($moduleKey, 'portal_');
+                    $previousStatus = (string) ($record['status'] ?? '');
+                    $updatedStatus = (string) ($values['status'] ?? $previousStatus);
+                    $portalAction = $updatedStatus === 'Terbit' && $previousStatus !== 'Terbit'
+                        ? 'menerbitkan konten publik'
+                        : ($updatedStatus === 'Arsip' && $previousStatus !== 'Arsip' ? 'mengarsipkan konten publik' : 'memperbarui konten portal');
+                    record_activity(
+                        $pdo,
+                        $isPortalRecord ? $portalAction : 'ubah',
+                        $table,
+                        $id,
+                        $isPortalRecord ? ($previousStatus . ' → ' . $updatedStatus) : null
+                    );
                     if ($isEditorialContent && isset($values['review_status']) && $previousReviewStatus !== $values['review_status']) {
                         $reviewLog = $pdo->prepare('INSERT INTO konten_review_log (entitas,record_id,status_awal,status_akhir,catatan,user_id) VALUES (?,?,?,?,?,?)');
                         $reviewLog->execute([$moduleKey, $id, $previousReviewStatus, $values['review_status'], $values['review_note'] ?? null, (int)$_SESSION['user_id']]);
@@ -1579,21 +1968,33 @@ if (in_array($action, ['create', 'edit'], true)) {
                     flash('Data berhasil diperbarui.');
                 }
                 $pdo->commit();
-                foreach ($oldUploads as $oldUpload) portal_remove_upload($oldUpload);
+                foreach ($oldUploads as $oldUpload) portal_remove_stored_asset($oldUpload);
                 redirect("index.php?module=$moduleKey");
             } catch (Throwable $ex) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
-                foreach ($newUploads as $newUpload) portal_remove_upload($newUpload);
+                foreach ($newUploads as $newUpload) portal_remove_stored_asset($newUpload);
+                foreach ($fields as $assetKey => $assetField) {
+                    if (in_array(($assetField['type'] ?? ''), ['image_upload', 'pdf_upload'], true)
+                        && in_array((string) ($values[$assetKey] ?? ''), $newUploads, true)) {
+                        $values[$assetKey] = $record[$assetKey] ?? null;
+                    }
+                }
                 if (!$ex instanceof PDOException) app_log('error', 'Portal record save failed', ['module' => $moduleKey, 'type' => get_class($ex)]);
                 $error = 'Data gagal disimpan. Periksa nomor yang duplikat dan pastikan ID relasi (kelas/guru/siswa/mapel/tahun ajaran) benar.';
             }
         } else {
-            foreach ($newUploads as $newUpload) portal_remove_upload($newUpload);
+            foreach ($newUploads as $newUpload) portal_remove_stored_asset($newUpload);
+            foreach ($fields as $assetKey => $assetField) {
+                if (in_array(($assetField['type'] ?? ''), ['image_upload', 'pdf_upload'], true)
+                    && in_array((string) ($values[$assetKey] ?? ''), $newUploads, true)) {
+                    $values[$assetKey] = $record[$assetKey] ?? null;
+                }
+            }
         }
         $record = array_merge($record, $values);
     }
     if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST' && $error !== '') {
-        foreach ($fields as $restoreKey => $restoreField) if (($restoreField['type'] ?? '') === 'image_upload') unset($values[$restoreKey]);
+        foreach ($fields as $restoreKey => $restoreField) if (in_array(($restoreField['type'] ?? ''), ['image_upload', 'pdf_upload'], true)) unset($values[$restoreKey]);
         $values['_review_action'] = (string)($_POST['review_action'] ?? 'draft');
         $_SESSION['_create_form_restore'][$moduleKey] = $values;
         flash($error, 'danger');
@@ -1606,7 +2007,7 @@ if (in_array($action, ['create', 'edit'], true)) {
     </div>
     <div class="card p-3 p-md-4">
         <?php if ($isOperatorAuthor && !empty($record['review_note'])): ?><div class="alert alert-warning" role="status"><strong>Catatan pemeriksa:</strong> <?= e($record['review_note']) ?></div><?php endif; ?>
-        <form method="post" <?= array_filter($fields, static fn($field) => ($field['type'] ?? '') === 'image_upload') ? ' enctype="multipart/form-data"' : '' ?>><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="save">
+        <form method="post" <?= array_filter($fields, static fn($field) => in_array(($field['type'] ?? ''), ['image_upload', 'pdf_upload'], true)) ? ' enctype="multipart/form-data"' : '' ?>><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="save">
             <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
             <div class="row"><?php foreach ($fields as $key => $field): if ($isOperatorAuthor && ($key === 'tampil_publik' || ($key === 'status' && $moduleKey !== 'kalender_akademik'))) continue;
                                     render_input($key, $field, $record[$key] ?? $field['default'] ?? '', isset($field['relation']) ? relation_options($pdo, $field['relation']) : []);
@@ -1685,7 +2086,7 @@ require __DIR__ . '/includes/header.php';
     <div class="modal fade app-entry-modal" id="createRecordModal" tabindex="-1" aria-labelledby="createRecordTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
             <div class="modal-content">
-                <form method="post" action="index.php?module=<?= e($moduleKey) ?>" <?= array_filter($fields, static fn($field) => ($field['type'] ?? '') === 'image_upload') ? 'enctype="multipart/form-data"' : '' ?>>
+                <form method="post" action="index.php?module=<?= e($moduleKey) ?>" <?= array_filter($fields, static fn($field) => in_array(($field['type'] ?? ''), ['image_upload', 'pdf_upload'], true)) ? 'enctype="multipart/form-data"' : '' ?>>
                     <div class="modal-header">
                         <div>
                             <h2 class="modal-title fs-5" id="createRecordTitle">Tambah <?= e($pageTitle) ?></h2>
@@ -1741,7 +2142,7 @@ require __DIR__ . '/includes/header.php';
             <tbody>
                 <?php if (!$rows): ?>
                     <tr>
-                        <?php // Tampilkan langkah awal yang relevan supaya daftar kosong tidak disalahartikan sebagai modul mati. 
+                        <?php // Tampilkan langkah awal yang relevan supaya daftar kosong tidak disalahartikan sebagai modul mati.
                         ?>
                         <td colspan="<?= count($cols) + ($canManage ? 2 : 1) ?>" class="text-center text-secondary py-4"><?php if ($moduleKey === 'kelas' && $academicYearCount === 0): ?>Belum ada kelas karena Tahun Ajaran belum dibuat. <?= $canManage ? 'Tambahkan Tahun Ajaran lebih dahulu.' : 'Hubungi Operator untuk menambah Tahun Ajaran.' ?><?php elseif ($moduleKey === 'mapel' && $canCreate): ?>Belum ada mata pelajaran. Gunakan tombol Tambah Data untuk mulai mengisi.<?php elseif ($moduleKey === 'mapel'): ?>Belum ada data mata pelajaran. Silakan hubungi Operator untuk melengkapinya.<?php else: ?>Belum ada data.<?php endif; ?></td>
                     </tr>

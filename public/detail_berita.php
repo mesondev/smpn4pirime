@@ -15,7 +15,7 @@ $img = portal_image($item['gambar_url'] ?? '', 'berita', (int)($item['id'] ?? 0)
         <h1>
             <?= e($item['judul'] ?? 'Berita tidak ditemukan') ?>
         </h1>
-            <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
+        <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
     </div>
 </section>
 <section class="content">

@@ -1,0 +1,17 @@
+{
+    "editor.wordWrap": "on",
+    "editor.wrappingIndent": "indent",
+    "editor.rulers": [100],
+    "editor.guides.indentation": true,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "[php]": {
+        "editor.defaultFormatter": "bmewburn.vscode-intelephense-client"
+    },
+    "[css]": {
+        "editor.defaultFormatter": "vscode.css-language-features"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features"
+    }
+}

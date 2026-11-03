@@ -4,6 +4,14 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../config/database.php';
 
+function portal_log_query_failure(string $operation, PDOException $exception): void
+{
+    app_log('error', 'Public portal database query failed', [
+        'operation' => $operation,
+        'exception' => $exception->getMessage(),
+    ]);
+}
+
 function portal_rows(PDO $pdo, string $sql, array $params = []): array
 {
     try {
@@ -11,6 +19,7 @@ function portal_rows(PDO $pdo, string $sql, array $params = []): array
         $stmt->execute($params);
         return $stmt->fetchAll();
     } catch (PDOException $e) {
+        portal_log_query_failure('fetch rows', $e);
         return [];
     }
 }
@@ -27,6 +36,7 @@ function portal_schema_ready(PDO $pdo, string $table, array $columns = []): bool
         }
         return true;
     } catch (PDOException $e) {
+        portal_log_query_failure('check schema', $e);
         return false;
     }
 }
@@ -37,12 +47,29 @@ function portal_row(PDO $pdo, string $sql, array $params = []): array
         $stmt->execute($params);
         return $stmt->fetch() ?: [];
     } catch (PDOException $e) {
+        portal_log_query_failure('fetch row', $e);
         return [];
     }
 }
 function portal_profile(PDO $pdo): array
 {
-    return array_replace(['nama' => 'SMP Negeri 4 Pirime', 'alamat' => '', 'telepon' => '', 'email' => '', 'sejarah' => '', 'visi' => '', 'misi' => '', 'sambutan' => '', 'jam_layanan' => '', 'peta_url' => ''], portal_row($pdo, 'SELECT * FROM profil_sekolah WHERE id=1 LIMIT 1'));
+    return array_replace(['nama' => 'SMP Negeri 4 Pirime', 'npsn' => '60303637', 'alamat' => '', 'alamat_jalan' => 'Jln. Milimbo-Tiom', 'kampung' => 'Umbanume', 'distrik' => 'Pirime', 'kabupaten' => 'Lanny Jaya', 'provinsi' => 'Papua Pegunungan', 'kode_pos' => '', 'status_sekolah' => 'Negeri', 'jenjang' => 'SMP', 'naungan' => 'Pemerintah Daerah', 'akreditasi' => 'C', 'akreditasi_status' => 'perlu_verifikasi', 'visi_status' => 'rancangan', 'misi_status' => 'rancangan', 'tujuan_status' => 'rancangan', 'sejarah_status' => 'perlu_verifikasi', 'tujuan' => '', 'telepon' => '', 'email' => '', 'sejarah' => '', 'visi' => '', 'misi' => '', 'sambutan' => '', 'jam_layanan' => '', 'peta_url' => ''], portal_row($pdo, 'SELECT * FROM profil_sekolah WHERE id=1 LIMIT 1'));
+}
+function portal_phone_uri(?string $phone): string
+{
+    $normalized = preg_replace('/[^0-9+]/', '', trim((string)$phone)) ?? '';
+    return preg_match('/^\+?[0-9]{7,20}$/', $normalized) ? $normalized : '';
+}
+function portal_whatsapp_number(?string $phone): string
+{
+    $number = preg_replace('/\D+/', '', trim((string)$phone)) ?? '';
+    if (str_starts_with($number, '0')) $number = '62' . substr($number, 1);
+    return preg_match('/^[0-9]{7,20}$/', $number) ? $number : '';
+}
+function portal_email_address(?string $email): string
+{
+    $email = trim((string)$email);
+    return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
 }
 // Expose aggregate public counts only, and leave unavailable metrics blank when a schema is incomplete.
 function portal_public_stats(PDO $pdo): array
@@ -52,6 +79,7 @@ function portal_public_stats(PDO $pdo): array
         try {
             return (int)$pdo->query($sql)->fetchColumn();
         } catch (PDOException $e) {
+            portal_log_query_failure('count public statistic', $e);
             return null;
         }
     };
@@ -89,7 +117,7 @@ function portal_date(?string $date, string $format = 'd M Y'): string
 function portal_image(?string $url, string $type = '', int $id = 0): string
 {
     $url = trim((string)$url);
-    if (preg_match('~^uploads/portal/[a-f0-9]{40}\.(?:jpg|png|webp)$~i', $url) && in_array($type, ['berita', 'galeri'], true) && $id > 0) {
+    if (preg_match('~^uploads/portal/[a-f0-9]{40}\.(?:jpg|png|webp)$~i', $url) && in_array($type, ['berita', 'galeri', 'fasilitas', 'struktur'], true) && $id > 0) {
         return '../media/portal.php?type=' . $type . '&id=' . $id;
     }
     return '';
@@ -98,4 +126,17 @@ function portal_excerpt(string $text, int $length = 180): string
 {
     $text = trim(strip_tags($text));
     return mb_strlen($text, 'UTF-8') > $length ? mb_substr($text, 0, $length, 'UTF-8') . '…' : $text;
+}
+
+function portal_social_links(PDO $pdo): array
+{
+    if (!portal_schema_ready($pdo, 'portal_tautan_sosial', ['platform', 'url', 'status'])) return [];
+    $allowed = ['facebook', 'instagram', 'youtube', 'tiktok', 'twitter-x'];
+    $links = [];
+    foreach (portal_rows($pdo, "SELECT platform,url FROM portal_tautan_sosial WHERE status='aktif' ORDER BY id") as $row) {
+        $platform = (string)$row['platform'];
+        $url = filter_var($row['url'], FILTER_VALIDATE_URL);
+        if (in_array($platform, $allowed, true) && $url && in_array(strtolower((string)parse_url($url, PHP_URL_SCHEME)), ['https'], true)) $links[$platform] = $url;
+    }
+    return $links;
 }

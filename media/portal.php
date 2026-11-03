@@ -6,14 +6,20 @@ require_once __DIR__ . '/../config/database.php';
 
 $type = (string)($_GET['type'] ?? '');
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
-$tables = ['berita' => ['table' => 'berita_sekolah'], 'galeri' => ['table' => 'galeri_sekolah']];
+$tables = [
+    'berita' => ['table' => 'berita_sekolah', 'image' => 'gambar_url'],
+    'galeri' => ['table' => 'galeri_sekolah', 'image' => 'gambar_url'],
+    'fasilitas' => ['table' => 'portal_fasilitas', 'image' => 'gambar_url'],
+    'struktur' => ['table' => 'portal_struktur_sekolah', 'image' => 'foto_url'],
+];
 if ($id < 1 || !isset($tables[$type])) {
     http_response_code(404);
     exit;
 }
 
 try {
-    $stmt = $pdo->prepare('SELECT gambar_url,status FROM `' . $tables[$type]['table'] . '` WHERE id=? LIMIT 1');
+    $imageColumn = $tables[$type]['image'];
+    $stmt = $pdo->prepare('SELECT `' . $imageColumn . '` AS gambar_url,status FROM `' . $tables[$type]['table'] . '` WHERE id=? LIMIT 1');
     $stmt->execute([$id]);
     $record = $stmt->fetch();
 } catch (PDOException $e) {

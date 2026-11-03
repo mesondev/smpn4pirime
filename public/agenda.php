@@ -1,4 +1,5 @@
 <?php require_once __DIR__ . '/_common.php';
+require_once __DIR__ . '/_public_sections.php';
 $portalProfile = portal_profile($pdo);
 $pageTitle = 'Agenda Akademik';
 $activePage = 'agenda';
@@ -11,7 +12,7 @@ require __DIR__ . '/_header.php'; ?>
         <span class="eyebrow">Tanggal penting</span>
         <h1>Kalender Akademik</h1>
         <p>Agenda dan kegiatan sekolah yang tercatat untuk tahun <?= $year ?>.</p>
-            <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
+        <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
     </div>
 </section>
 
@@ -31,8 +32,7 @@ require __DIR__ . '/_header.php'; ?>
         </form>
         <div class="card">
             <?php if (!$items): ?>
-                <div class="empty">Belum ada agenda yang tercatat untuk tahun ini.
-                </div>
+                <?php public_empty_panel('calendar2-event', 'Belum ada agenda untuk tahun ini', 'Agenda akademik akan ditampilkan setelah tanggal dan kegiatannya dikonfirmasi sekolah.'); ?>
                 <?php else: foreach ($items as $ev): ?>
                     <div class="agenda-row">
                         <div class="agenda-date">

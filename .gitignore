@@ -10,6 +10,7 @@ node_modules/
 /config/
 /uploads/
 /outputs/
+/tmp/
 /storage/logs/*.log
 /.env
 /.env.*

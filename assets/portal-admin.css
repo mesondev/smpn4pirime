@@ -1,0 +1,42 @@
+/* Ringkasan administrasi portal publik memakai pola panel dashboard SIMS. */
+.portal-admin-page { max-width: 1500px; margin-inline: auto; padding: .5rem 0 2rem; }
+.portal-admin-heading, .portal-admin-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.portal-admin-heading { margin: .25rem 0 1.25rem; }
+.portal-admin-heading h1 { margin: .25rem 0; font-size: clamp(1.45rem, 3vw, 2rem); font-weight: 800; letter-spacing: -.035em; }
+.portal-admin-heading p, .portal-admin-section-heading p { margin: 0; color: var(--muted, #718096); }
+.portal-admin-eyebrow { color: #2470c5; font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.portal-admin-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .85rem; margin-bottom: 1.25rem; }
+.portal-admin-kpis article { display: grid; gap: .3rem; padding: 1rem; border: 1px solid var(--line, #e4eaf1); border-radius: 1rem; background: var(--surface, #fff); box-shadow: 0 8px 24px rgb(25 48 78 / 5%); }
+.portal-admin-kpis article > span { display: flex; align-items: center; gap: .5rem; color: var(--muted, #718096); font-size: .81rem; font-weight: 700; }
+.portal-admin-kpis article > span i { color: #2167bd; font-size: 1rem; }
+.portal-admin-kpis article > strong { color: var(--ink, #172b4d); font-size: 1.8rem; font-weight: 800; line-height: 1.15; }
+.portal-admin-kpis article > small { color: var(--muted, #718096); }
+.portal-admin-kpis article > a { font-size: .82rem; font-weight: 700; text-decoration: none; }
+.portal-admin-section { padding: clamp(1rem, 2.5vw, 1.4rem); border: 1px solid var(--line, #e4eaf1); border-radius: 1rem; background: var(--surface, #fff); box-shadow: 0 8px 24px rgb(25 48 78 / 5%); }
+.portal-admin-section-heading { margin-bottom: 1rem; }
+.portal-admin-section-heading h2 { margin: 0 0 .3rem; font-size: 1.15rem; font-weight: 800; }
+.portal-admin-section-heading p { font-size: .84rem; }
+.portal-admin-modules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.portal-admin-module { display: flex; align-items: center; gap: .75rem; min-width: 0; padding: .85rem; border: 1px solid var(--line, #e4eaf1); border-radius: .85rem; }
+.portal-admin-module-icon { display: grid; flex: 0 0 auto; width: 2.7rem; height: 2.7rem; place-items: center; border-radius: .8rem; background: #eaf2ff; color: #185bb4; font-size: 1.15rem; }
+.portal-admin-module-copy { flex: 1; min-width: 0; }
+.portal-admin-module-copy h3 { margin: 0 0 .2rem; font-size: .92rem; font-weight: 800; }
+.portal-admin-module-copy p { margin: 0; color: var(--muted, #718096); font-size: .78rem; }
+.portal-admin-publishing-note { display: flex; align-items: flex-start; gap: .75rem; margin-top: 1rem; padding: 1rem; border: 1px solid #ead9aa; border-radius: .85rem; background: #fff9e9; color: #614c20; }
+.portal-admin-publishing-note i { margin-top: .1rem; font-size: 1.1rem; }
+.portal-admin-publishing-note p { margin: 0; font-size: .84rem; line-height: 1.6; }
+html[data-theme="dark"] .portal-admin-section, html[data-theme="dark"] .portal-admin-kpis article, html[data-theme="dark"] .portal-admin-module { border-color: #334765; background: #142642; color: #eaf1ff; }
+html[data-theme="dark"] .portal-admin-publishing-note { border-color: #6e5b2e; background: #302a1d; color: #f1dfaa; }
+
+@media (max-width: 900px) {
+    .portal-admin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+    .portal-admin-heading { align-items: flex-start; flex-direction: column; }
+    .portal-admin-heading .btn { width: 100%; }
+    .portal-admin-modules { grid-template-columns: 1fr; }
+    .portal-admin-module { align-items: flex-start; flex-wrap: wrap; }
+    .portal-admin-module-copy { flex-basis: calc(100% - 3.5rem); }
+    .portal-admin-module > .btn { margin-left: 3.45rem; }
+}

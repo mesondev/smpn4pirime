@@ -1,4 +1,5 @@
 <?php require_once __DIR__ . '/_common.php';
+require_once __DIR__ . '/_public_sections.php';
 $portalProfile = portal_profile($pdo);
 $pageTitle = 'Pengumuman';
 $activePage = 'pengumuman';
@@ -16,7 +17,7 @@ require __DIR__ . '/_header.php'; ?>
         <span class="eyebrow">Informasi resmi</span>
         <h1>Pengumuman Sekolah</h1>
         <p>Pengumuman yang ditampilkan telah diterbitkan dan masih berlaku.</p>
-            <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
+        <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
     </div>
 </section>
 <section class="content">
@@ -27,7 +28,7 @@ require __DIR__ . '/_header.php'; ?>
         </form>
         <div class="notice-list">
             <?php if (!$items): ?>
-                <div class="empty">Tidak ada pengumuman yang ditemukan.</div>
+                <?php public_empty_panel('megaphone', $q !== '' ? 'Pengumuman tidak ditemukan' : 'Belum ada pengumuman aktif', $q !== '' ? 'Coba kata kunci lain atau hubungi sekolah untuk menanyakan informasi yang Anda cari.' : 'Pengumuman resmi akan ditampilkan setelah diterbitkan dan masih berlaku.'); ?>
                 <?php else: foreach ($items as $item): ?>
                     <a class="notice-item" href="detail_pengumuman.php?id=<?= (int)$item['id'] ?>">
                         <span class="date-label">

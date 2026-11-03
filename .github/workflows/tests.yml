@@ -1,0 +1,35 @@
+name: SIMS automated checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  php-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: curl, fileinfo, mbstring, pdo, pdo_mysql
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate Composer configuration
+        run: composer validate --no-check-publish
+
+      - name: Run automated tests
+        env:
+          SIMS_TEST_DB: '0'
+        run: composer test

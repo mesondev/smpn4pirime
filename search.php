@@ -4,7 +4,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/config/database.php';
 require_login();
-if (in_array(current_role(), ['guru', 'siswa'], true)) { http_response_code(403); exit('Pencarian data sekolah tidak tersedia untuk peran ini.'); }
+if (in_array(current_role(), ['guru', 'siswa'], true)) {
+    http_response_code(403);
+    exit('Pencarian data sekolah tidak tersedia untuk peran ini.');
+}
 $query = trim((string)($_GET['q'] ?? ''));
 $results = [];
 if (mb_strlen($query) >= 2) {

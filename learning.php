@@ -35,7 +35,7 @@ if (!in_array($view, $validViews, true)) $view = 'materi';
 $searchInput = (string)($_GET['q'] ?? '');
 $studentSearch = trim(function_exists('mb_substr') ? mb_substr($searchInput, 0, 100, 'UTF-8') : substr($searchInput, 0, 100));
 $studentSubjectFilter = ctype_digit((string)($_GET['mapel_id'] ?? '')) ? (int)$_GET['mapel_id'] : 0;
-$studentTaskStatus = in_array((string)($_GET['status_tugas'] ?? ''), ['belum','terkumpul','terlambat','dinilai'], true) ? (string)$_GET['status_tugas'] : '';
+$studentTaskStatus = in_array((string)($_GET['status_tugas'] ?? ''), ['belum', 'terkumpul', 'terlambat', 'dinilai'], true) ? (string)$_GET['status_tugas'] : '';
 $studentMaterialSubjects = [];
 $studentTaskSubjects = [];
 $error = '';
@@ -123,11 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $task = $check->fetch();
             if (!$task) throw new InvalidArgumentException('Tugas tidak tersedia untuk kelas Anda.');
             if ($task['tenggat'] && strtotime($task['tenggat']) < time()) throw new InvalidArgumentException('Tenggat pengumpulan sudah lewat.');
-            $relativeFile = null; $originalFileName = null;
+            $relativeFile = null;
+            $originalFileName = null;
             if ($hasUpload) {
                 if ((int)$upload['error'] !== UPLOAD_ERR_OK || !is_uploaded_file((string)$upload['tmp_name']) || (int)$upload['size'] < 1 || (int)$upload['size'] > 10 * 1024 * 1024) throw new InvalidArgumentException('Lampiran tugas maksimal 10 MB.');
                 $mime = (new finfo(FILEINFO_MIME_TYPE))->file((string)$upload['tmp_name']);
-                $allowed = ['application/pdf'=>'pdf','application/msword'=>'doc','application/vnd.openxmlformats-officedocument.wordprocessingml.document'=>'docx','application/vnd.ms-excel'=>'xls','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'=>'xlsx','application/vnd.ms-powerpoint'=>'ppt','application/vnd.openxmlformats-officedocument.presentationml.presentation'=>'pptx','text/plain'=>'txt','image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'];
+                $allowed = ['application/pdf' => 'pdf', 'application/msword' => 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx', 'application/vnd.ms-excel' => 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx', 'application/vnd.ms-powerpoint' => 'ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation' => 'pptx', 'text/plain' => 'txt', 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
                 if (!isset($allowed[$mime])) throw new InvalidArgumentException('Format lampiran yang diizinkan: PDF, Office, TXT, JPG, PNG, atau WebP.');
                 $dir = __DIR__ . '/uploads/akademik';
                 if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) throw new RuntimeException('Folder lampiran tidak dapat dibuat.');
@@ -149,7 +150,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $save->execute([$taskId, $studentId, $answer]);
             }
             $storedFile = null;
-            if ($relativeFile && is_string($oldSubmissionFile) && preg_match('~^uploads/akademik/([a-f0-9]{40}\.[a-z0-9]+)$~i', $oldSubmissionFile, $oldMatch)) { $oldPath = __DIR__ . '/uploads/akademik/' . $oldMatch[1]; if (is_file($oldPath)) @unlink($oldPath); }
+            if ($relativeFile && is_string($oldSubmissionFile) && preg_match('~^uploads/akademik/([a-f0-9]{40}\.[a-z0-9]+)$~i', $oldSubmissionFile, $oldMatch)) {
+                $oldPath = __DIR__ . '/uploads/akademik/' . $oldMatch[1];
+                if (is_file($oldPath)) @unlink($oldPath);
+            }
             record_activity($pdo, 'kumpulkan tugas', 'pengumpulan_tugas', null, 'siswa ' . $studentId . ' · tugas ' . $taskId);
             $success = 'Jawaban berhasil dikumpulkan.';
             $view = 'tugas';
@@ -214,8 +218,15 @@ if (in_array($role, ['guru', 'admin'], true) && $view === 'pengumpulan') {
         $studentMaterialSubjects = $studentMaterialSubjectsStmt->fetchAll();
         $sql = "SELECT x.*,k.nama_kelas,m.nama_mapel FROM materi_pelajaran x JOIN kelas k ON k.id=x.kelas_id JOIN mapel m ON m.id=x.mapel_id JOIN siswa s ON s.kelas_id=x.kelas_id WHERE s.id=? AND s.status='Aktif' AND x.status='Terbit'";
         $params = [$studentId];
-        if ($studentSearch !== '') { $sql .= ' AND (x.judul LIKE ? OR x.deskripsi LIKE ?)'; $params[] = '%' . $studentSearch . '%'; $params[] = '%' . $studentSearch . '%'; }
-        if ($studentSubjectFilter > 0) { $sql .= ' AND x.mapel_id=?'; $params[] = $studentSubjectFilter; }
+        if ($studentSearch !== '') {
+            $sql .= ' AND (x.judul LIKE ? OR x.deskripsi LIKE ?)';
+            $params[] = '%' . $studentSearch . '%';
+            $params[] = '%' . $studentSearch . '%';
+        }
+        if ($studentSubjectFilter > 0) {
+            $sql .= ' AND x.mapel_id=?';
+            $params[] = $studentSubjectFilter;
+        }
         $sql .= ' ORDER BY x.created_at DESC,x.id DESC';
         $q = $pdo->prepare($sql);
         $q->execute($params);
@@ -234,8 +245,15 @@ if (in_array($role, ['guru', 'admin'], true) && $view === 'pengumpulan') {
         $taskSubmissionFileFields = $hasSubmissionFiles ? 'p.file_path AS submission_file_path,p.file_name AS submission_file_name' : 'NULL AS submission_file_path,NULL AS submission_file_name';
         $sql = "SELECT t.*,k.nama_kelas,m.nama_mapel,p.id AS submission_id,p.jawaban,$taskSubmissionFileFields,p.dikumpulkan_at,p.nilai,p.umpan_balik FROM tugas_pelajaran t JOIN kelas k ON k.id=t.kelas_id JOIN mapel m ON m.id=t.mapel_id JOIN siswa s ON s.kelas_id=t.kelas_id LEFT JOIN pengumpulan_tugas p ON p.tugas_id=t.id AND p.siswa_id=s.id WHERE s.id=? AND s.status='Aktif' AND t.status='Terbit'";
         $params = [$studentId];
-        if ($studentSearch !== '') { $sql .= ' AND (t.judul LIKE ? OR t.instruksi LIKE ?)'; $params[] = '%' . $studentSearch . '%'; $params[] = '%' . $studentSearch . '%'; }
-        if ($studentSubjectFilter > 0) { $sql .= ' AND t.mapel_id=?'; $params[] = $studentSubjectFilter; }
+        if ($studentSearch !== '') {
+            $sql .= ' AND (t.judul LIKE ? OR t.instruksi LIKE ?)';
+            $params[] = '%' . $studentSearch . '%';
+            $params[] = '%' . $studentSearch . '%';
+        }
+        if ($studentSubjectFilter > 0) {
+            $sql .= ' AND t.mapel_id=?';
+            $params[] = $studentSubjectFilter;
+        }
         $sql .= match ($studentTaskStatus) {
             'belum' => ' AND p.id IS NULL AND (t.tenggat IS NULL OR t.tenggat>=NOW())',
             'terkumpul' => ' AND p.id IS NOT NULL AND p.nilai IS NULL AND (t.tenggat IS NULL OR p.dikumpulkan_at<=t.tenggat)',
@@ -260,7 +278,14 @@ require __DIR__ . '/includes/header.php';
 </div>
 <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?><?php if ($success): ?><div class="alert alert-success"><?= e($success) ?></div><?php endif; ?>
 <div class="d-flex flex-wrap gap-2 mb-4"><a class="btn <?= $view === 'materi' ? 'btn-primary' : 'btn-outline-primary' ?>" href="learning.php?view=materi">Materi</a><a class="btn <?= $view === 'tugas' ? 'btn-primary' : 'btn-outline-primary' ?>" href="learning.php?view=tugas">Tugas</a><a class="btn <?= $view === 'pengumpulan' ? 'btn-primary' : 'btn-outline-primary' ?>" href="learning.php?view=pengumpulan"><?= $role === 'siswa' ? 'Riwayat Pengumpulan' : 'Pengumpulan dan Penilaian' ?></a></div>
-<?php if ($role === 'siswa' && in_array($view, ['materi','tugas'], true)): ?><form method="get" class="card p-3 mb-4 row g-2 align-items-end student-filter-form"><input type="hidden" name="view" value="<?= e($view) ?>"><div class="col-md-5"><label class="form-label small" for="learningSearch">Cari <?= $view === 'materi' ? 'materi' : 'tugas' ?></label><input class="form-control form-control-sm" id="learningSearch" name="q" value="<?= e($studentSearch) ?>" placeholder="Ketik judul atau isi instruksi"></div><div class="col-md-4"><label class="form-label small" for="learningSubject">Mata pelajaran</label><select class="form-select form-select-sm" id="learningSubject" name="mapel_id"><option value="">Semua mata pelajaran</option><?php foreach (($view === 'materi' ? $studentMaterialSubjects : $studentTaskSubjects) as $subject): ?><option value="<?= (int)$subject['id'] ?>" <?= $studentSubjectFilter === (int)$subject['id'] ? 'selected' : '' ?>><?= e($subject['nama_mapel']) ?></option><?php endforeach; ?></select></div><?php if ($view === 'tugas'): ?><div class="col-md-3"><label class="form-label small" for="taskStatus">Status pengerjaan</label><select class="form-select form-select-sm" id="taskStatus" name="status_tugas"><option value="">Semua status</option><?php foreach (['belum'=>'Belum dikerjakan','terkumpul'=>'Sudah dikumpulkan','terlambat'=>'Terlambat','dinilai'=>'Sudah dinilai'] as $key=>$label): ?><option value="<?= e($key) ?>" <?= $studentTaskStatus === $key ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="col-12 d-flex gap-2"><button class="btn btn-sm btn-primary"><i class="bi bi-search me-1"></i>Terapkan</button><a class="btn btn-sm btn-outline-secondary" href="learning.php?view=<?= e($view) ?>">Reset</a></div></form><?php endif; ?>
+<?php if ($role === 'siswa' && in_array($view, ['materi', 'tugas'], true)): ?><form method="get" class="card p-3 mb-4 row g-2 align-items-end student-filter-form"><input type="hidden" name="view" value="<?= e($view) ?>">
+        <div class="col-md-5"><label class="form-label small" for="learningSearch">Cari <?= $view === 'materi' ? 'materi' : 'tugas' ?></label><input class="form-control form-control-sm" id="learningSearch" name="q" value="<?= e($studentSearch) ?>" placeholder="Ketik judul atau isi instruksi"></div>
+        <div class="col-md-4"><label class="form-label small" for="learningSubject">Mata pelajaran</label><select class="form-select form-select-sm" id="learningSubject" name="mapel_id">
+                <option value="">Semua mata pelajaran</option><?php foreach (($view === 'materi' ? $studentMaterialSubjects : $studentTaskSubjects) as $subject): ?><option value="<?= (int)$subject['id'] ?>" <?= $studentSubjectFilter === (int)$subject['id'] ? 'selected' : '' ?>><?= e($subject['nama_mapel']) ?></option><?php endforeach; ?>
+            </select></div><?php if ($view === 'tugas'): ?><div class="col-md-3"><label class="form-label small" for="taskStatus">Status pengerjaan</label><select class="form-select form-select-sm" id="taskStatus" name="status_tugas">
+                    <option value="">Semua status</option><?php foreach (['belum' => 'Belum dikerjakan', 'terkumpul' => 'Sudah dikumpulkan', 'terlambat' => 'Terlambat', 'dinilai' => 'Sudah dinilai'] as $key => $label): ?><option value="<?= e($key) ?>" <?= $studentTaskStatus === $key ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+                </select></div><?php endif; ?><div class="col-12 d-flex gap-2"><button class="btn btn-sm btn-primary"><i class="bi bi-search me-1"></i>Terapkan</button><a class="btn btn-sm btn-outline-secondary" href="learning.php?view=<?= e($view) ?>">Reset</a></div>
+    </form><?php endif; ?>
 <?php if ($role === 'admin' && in_array($view, ['materi', 'tugas'], true) && $rows): ?><div class="card p-3 mb-4">
         <h2 class="h6">Kontrol status Super Admin</h2>
         <div class="table-responsive">
@@ -302,7 +327,9 @@ require __DIR__ . '/includes/header.php';
                     <div class="student-record-body"><strong><?= e($row['judul']) ?></strong><small><?= e($row['nama_mapel']) ?> · <?= e($row['nama_guru']) ?></small><small>Dikumpulkan <?= e(date('d/m/Y H:i', strtotime($row['dikumpulkan_at']))) ?><?= $row['tenggat'] ? ' · Tenggat ' . e(date('d/m/Y H:i', strtotime($row['tenggat']))) : '' ?></small></div>
                     <span class="student-status <?= $row['nilai'] !== null ? 'submitted' : ($late ? 'overdue' : 'waiting') ?>"><?= e($submissionState) ?></span>
                 </div>
-                <div class="student-submission-detail"><p><?= nl2br(e($row['jawaban'] ?: 'Tidak ada jawaban teks.')) ?></p><?php if ($row['file_path']): ?><a href="media/academic.php?type=jawaban&id=<?= (int)$row['id'] ?>"><i class="bi bi-paperclip me-1"></i><?= e($row['file_name'] ?: 'Buka lampiran yang dikirim') ?></a><?php endif; ?><?php if ($row['nilai'] !== null): ?><div class="student-feedback"><strong>Nilai <?= e(number_format((float)$row['nilai'],1)) ?></strong><?php if ($row['umpan_balik']): ?><p><?= nl2br(e($row['umpan_balik'])) ?></p><?php endif; ?></div><?php else: ?><small class="text-secondary">Jawaban menunggu pemeriksaan guru.</small><?php endif; ?></div>
+                <div class="student-submission-detail">
+                    <p><?= nl2br(e($row['jawaban'] ?: 'Tidak ada jawaban teks.')) ?></p><?php if ($row['file_path']): ?><a href="media/academic.php?type=jawaban&id=<?= (int)$row['id'] ?>"><i class="bi bi-paperclip me-1"></i><?= e($row['file_name'] ?: 'Buka lampiran yang dikirim') ?></a><?php endif; ?><?php if ($row['nilai'] !== null): ?><div class="student-feedback"><strong>Nilai <?= e(number_format((float)$row['nilai'], 1)) ?></strong><?php if ($row['umpan_balik']): ?><p><?= nl2br(e($row['umpan_balik'])) ?></p><?php endif; ?></div><?php else: ?><small class="text-secondary">Jawaban menunggu pemeriksaan guru.</small><?php endif; ?>
+                </div>
             </article>
         <?php endforeach; ?>
     </div>
@@ -345,7 +372,10 @@ require __DIR__ . '/includes/header.php';
                     <p class="flex-grow-1" style="white-space:pre-wrap"><?= e($row['deskripsi']) ?></p><?php if ($row['file_path']): ?><a class="btn btn-outline-primary mt-auto" href="media/academic.php?type=materi&id=<?= (int)$row['id'] ?>"><i class="bi bi-download me-1"></i><?= e($row['file_name'] ?: 'Unduh materi') ?></a><?php endif; ?>
                 </article>
             </div><?php endforeach; ?></div>
-<?php else: ?><div class="vstack gap-3"><?php if (!$rows): ?><div class="empty-state">Belum ada tugas<?= $role === 'siswa' ? ' yang diterbitkan untuk kelas Anda.' : '.' ?></div><?php endif; ?><?php foreach ($rows as $row): $taskSubmitted = $role === 'siswa' && !empty($row['submission_id']); $taskLate = $taskSubmitted && !empty($row['tenggat']) && strtotime((string)$row['dikumpulkan_at']) > strtotime((string)$row['tenggat']); $taskOverdue = $role === 'siswa' && !$taskSubmitted && !empty($row['tenggat']) && strtotime((string)$row['tenggat']) < time(); $taskState = $role !== 'siswa' ? '' : ($row['nilai'] !== null ? ($taskLate ? 'Sudah dinilai · terlambat' : 'Sudah dinilai') : ($taskSubmitted ? ($taskLate ? 'Sudah dikumpulkan · terlambat' : 'Sudah dikumpulkan') : ($taskOverdue ? 'Terlambat' : 'Belum dikerjakan'))); ?><article class="card p-3 p-md-4">
+<?php else: ?><div class="vstack gap-3"><?php if (!$rows): ?><div class="empty-state">Belum ada tugas<?= $role === 'siswa' ? ' yang diterbitkan untuk kelas Anda.' : '.' ?></div><?php endif; ?><?php foreach ($rows as $row): $taskSubmitted = $role === 'siswa' && !empty($row['submission_id']);
+                                                                                                                                                                                                    $taskLate = $taskSubmitted && !empty($row['tenggat']) && strtotime((string)$row['dikumpulkan_at']) > strtotime((string)$row['tenggat']);
+                                                                                                                                                                                                    $taskOverdue = $role === 'siswa' && !$taskSubmitted && !empty($row['tenggat']) && strtotime((string)$row['tenggat']) < time();
+                                                                                                                                                                                                    $taskState = $role !== 'siswa' ? '' : ($row['nilai'] !== null ? ($taskLate ? 'Sudah dinilai · terlambat' : 'Sudah dinilai') : ($taskSubmitted ? ($taskLate ? 'Sudah dikumpulkan · terlambat' : 'Sudah dikumpulkan') : ($taskOverdue ? 'Terlambat' : 'Belum dikerjakan'))); ?><article class="card p-3 p-md-4">
                 <div class="d-flex flex-wrap justify-content-between gap-2">
                     <div>
                         <h2 class="h5 mb-1"><?= e($row['judul']) ?></h2>

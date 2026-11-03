@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/includes/auth.php';
+require_login();
 require_module_access('notifikasi');
 $userId = (int)($_SESSION['user_id'] ?? 0);
 $canSeeLegacy = in_array(current_role(), ['admin', 'operator'], true);

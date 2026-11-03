@@ -7,6 +7,10 @@ $navigationGroups = $mustChangePassword
     : require __DIR__ . '/navigation.php';
 $activeModule = (string)($_GET['module'] ?? '');
 $currentPage = basename((string)($_SERVER['PHP_SELF'] ?? 'index.php'));
+$displayPreferences = is_logged_in() ? user_display_preferences($pdo) : normalize_user_display_preferences([]);
+$dashboardView = (string)($_GET['view'] ?? 'dashboard');
+$isDashboardHome = ($currentPage === 'index.php' && $activeModule === '' && in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true))
+    || ($currentPage === 'teacher.php' && current_role() === 'guru' && $dashboardView === 'dashboard');
 $unreadNotifications = 0;
 if (is_logged_in() && !$mustChangePassword && can_view_module('notifikasi')) {
     try {
@@ -30,20 +34,34 @@ if (is_logged_in() && !$mustChangePassword && can_view_module('notifikasi')) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
+    <meta name="user-theme" content="<?= e($displayPreferences['tema']) ?>">
+    <meta name="user-text-size" content="<?= e($displayPreferences['ukuran_teks']) ?>">
+    <meta name="user-table-density" content="<?= e($displayPreferences['kerapatan_tabel']) ?>">
     <title><?= e($pageTitle) ?> | SIMS SMP Negeri 4 Pirime</title>
+    <link rel="icon" type="image/png" href="assets/Lambang-Sekolah-SMP-Negeri-4-Pirime.png?v=<?= (int)filemtime(__DIR__ . '/../assets/Lambang-Sekolah-SMP-Negeri-4-Pirime.png') ?>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link href="assets/style.css?v=<?= (int)filemtime(__DIR__ . '/../assets/style.css') ?>" rel="stylesheet">
+    <link href="assets/style.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/style.css'), 0, 12)) ?>" rel="stylesheet">
+    <?php if ($currentPage === 'settings.php'): ?>
+        <link href="assets/settings.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/settings.css'), 0, 12)) ?>" rel="stylesheet">
+    <?php endif; ?>
+    <?php if ($currentPage === 'index.php' && $activeModule === 'ppdb_admin'): ?>
+        <link href="assets/ppdb-admin.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/ppdb-admin.css'), 0, 12)) ?>" rel="stylesheet">
+    <?php endif; ?>
+    <?php if ($currentPage === 'index.php' && $activeModule === 'portal_admin'): ?>
+        <link href="assets/portal-admin.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/portal-admin.css'), 0, 12)) ?>" rel="stylesheet">
+    <?php endif; ?>
     <?php if ($currentPage === 'student.php'): ?>
         <link href="assets/student-dashboard.css?v=<?= (int)filemtime(__DIR__ . '/../assets/student-dashboard.css') ?>" rel="stylesheet"><?php endif; ?>
-    <?php if (($currentPage === 'teacher.php' && current_role() === 'guru') || ($currentPage === 'index.php' && current_role() === 'kepala_sekolah')): ?>
-        <link href="assets/role-dashboards.css?v=<?= (int)filemtime(__DIR__ . '/../assets/role-dashboards.css') ?>" rel="stylesheet"><?php endif; ?>
+    <?php if (($currentPage === 'teacher.php' && current_role() === 'guru') || ($currentPage === 'index.php' && in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true) && ($activeModule === '' || current_role() === 'kepala_sekolah'))): ?>
+        <link href="assets/role-dashboards.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/role-dashboards.css'), 0, 12)) ?>" rel="stylesheet"><?php endif; ?>
     <?php if (in_array($currentPage, ['profile.php', 'biodata.php'], true)): ?>
         <link href="assets/account-biodata.css?v=<?= (int)filemtime(__DIR__ . '/../assets/account-biodata.css') ?>" rel="stylesheet"><?php endif; ?>
 </head>
 
-<body>
-    <div class="app-layout">
+<body<?= $isDashboardHome ? ' class="dashboard-navy-theme"' : '' ?> data-user-id="<?= (int) ($_SESSION['user_id'] ?? 0) ?>" data-preference-url="<?= e(app_url('settings.php?ajax=preferensi')) ?>">
+    <div class="app-layout" data-sidebar-collapsed="<?= $displayPreferences['sidebar_ciut'] ? '1' : '0' ?>">
         <aside class="sidebar no-print" id="appSidebar">
             <a class="sidebar-brand" href="index.php"><img class="brand-logo" src="assets/Lambang-Sekolah-SMP-Negeri-4-Pirime.png" alt="Lambang SMP Negeri 4 Pirime"><span><strong>SIMS SMPN 4</strong><small>Pirime · Papua Pegunungan</small></span></a>
             <div class="sidebar-school">SISTEM INFORMASI SEKOLAH</div>
@@ -73,7 +91,7 @@ if (is_logged_in() && !$mustChangePassword && can_view_module('notifikasi')) {
                     <div class="topbar-profile"><strong><?= e(current_user()) ?></strong><small><?= e(role_label()) ?></small></div>
                 </div>
             </header>
-            <main class="container-fluid page-content<?= current_role() === 'kepala_sekolah' && $currentPage === 'index.php' ? ' principal-dashboard-content' : (current_role() === 'guru' && $currentPage === 'teacher.php' ? ' teacher-dashboard-content' : '') ?>">
+            <main class="container-fluid page-content<?= current_role() === 'kepala_sekolah' && $currentPage === 'index.php' ? ' principal-dashboard-content' : (current_role() === 'guru' && $currentPage === 'teacher.php' ? ' teacher-dashboard-content' : (current_role() === 'admin' && $currentPage === 'index.php' && $activeModule === '' ? ' admin-dashboard-content' : (current_role() === 'operator' && $currentPage === 'index.php' && $activeModule === '' ? ' operator-dashboard-content' : ''))) ?>">
                 <?php if (!$mustChangePassword && can_view_module('notifikasi')): ?><div class="notification-live-region" id="notificationLiveRegion" aria-live="polite" aria-atomic="false"></div><?php endif; ?>
                 <?php if ($flashMessage): ?>
                     <div class="alert alert-<?= e($flashMessage['type']) ?> alert-dismissible fade show no-print" role="alert">

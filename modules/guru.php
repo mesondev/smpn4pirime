@@ -621,7 +621,10 @@ require __DIR__ . '/../includes/header.php';
         <div class="card p-3 p-md-4 mb-3">
             <p>Unggah berkas maksimal 5 MB dan 1.000 baris. CSV hasil ekspor Excel selalu didukung. <?= $spreadsheetAvailable ? 'XLS dan XLSX aktif melalui PhpSpreadsheet.' : 'XLS/XLSX tersedia setelah PhpSpreadsheet dan ekstensi PHP ZIP dipasang/diaktifkan.' ?></p>
             <p>Header wajib: <code>nama,jenis_kelamin</code> atau <code>Nama,JK</code>. Kolom opsional: <code>nip,telepon,email,alamat,status</code>. NIP ganda dilewati dan data lama tidak ditimpa.</p>
-            <p><a class="btn btn-outline-primary btn-sm" href="outputs/01a17976-f3da-7573-90e5-670290bb3000/Template_Impor_Guru_SIMS.csv" download>Unduh Template CSV</a></p>
+            <p class="d-flex flex-wrap gap-2">
+                <a class="btn btn-outline-primary btn-sm" href="assets/templates/Template_Impor_Guru_SIMS.csv" download>Unduh Template CSV</a>
+                <?php if ($spreadsheetAvailable): ?><a class="btn btn-outline-primary btn-sm" href="assets/templates/Template_Data_Guru_SMPN4_Pirime.xlsx" download>Unduh Template Excel</a><?php endif; ?>
+            </p>
             <form method="post" enctype="multipart/form-data" action="index.php?module=guru&action=import"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="import">
                 <div class="mb-3"><label class="form-label" for="csv_file">Berkas CSV<?= $spreadsheetAvailable ? ' atau XLS / XLSX' : '' ?></label><input class="form-control" type="file" id="csv_file" name="csv_file" accept=".csv,text/csv<?= $spreadsheetAvailable ? ',.xls,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel' : '' ?>" required></div><?php if ($spreadsheetAvailable): ?><div class="mb-3"><label class="form-label" for="worksheet_name">Nama sheet (opsional)</label><input class="form-control" id="worksheet_name" name="worksheet_name" value="<?= e($_POST['worksheet_name'] ?? '') ?>" placeholder="Kosongkan untuk memakai sheet pertama">
                         <div class="form-text">Sheet harus sama persis dengan nama di berkas Excel.</div>

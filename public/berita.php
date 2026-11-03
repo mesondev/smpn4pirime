@@ -1,4 +1,5 @@
 <?php require_once __DIR__ . '/_common.php';
+require_once __DIR__ . '/_public_sections.php';
 $portalProfile = portal_profile($pdo);
 $pageTitle = 'Berita dan Kegiatan';
 $activePage = 'berita';
@@ -20,16 +21,13 @@ require __DIR__ . '/_header.php'; ?>
         <p>Kegiatan, prestasi, dan cerita pembelajaran
             <?= e($portalProfile['nama']) ?>.
         </p>
-            <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
+        <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
     </div>
 </section>
 <section class="content">
     <div class="wrap">
         <?php if (!$schemaReady): ?>
-            <div class="schema-alert">Fitur berita belum aktif karena migrasi database portal publik belum dijalankan. Minta administrator mengimpor
-                <code>database/migrations/2026_10_29_public_portal.sql</code> ke database
-                <code>sims_db</code>.
-            </div>
+            <?php public_service_notice('Berita sekolah belum dapat dimuat. Silakan hubungi sekolah untuk memperoleh kabar terbaru.'); ?>
         <?php endif; ?>
         <form class="search-form" method="get">
             <input name="q" value="<?= e($q) ?>" placeholder="Cari berita atau kategori" aria-label="Cari berita">
@@ -37,7 +35,7 @@ require __DIR__ . '/_header.php'; ?>
         </form>
         <div class="cards">
             <?php if (!$items && $schemaReady): ?>
-                <div class="empty" style="grid-column:1/-1">Belum ada berita yang diterbitkan.</div>
+                <?php public_empty_panel('journal-text', 'Belum ada berita yang diterbitkan', 'Berita sekolah akan muncul di sini setelah pengelola memeriksa dan menerbitkannya.'); ?>
                 <?php else: foreach ($items as $s): $img = portal_image($s['gambar_url'], 'berita', (int)$s['id']); ?>
                     <article class="card story-card">
                         <?php if ($img): ?>

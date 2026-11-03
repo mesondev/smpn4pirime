@@ -200,6 +200,88 @@ function role_label(?string $role = null): string
         'kepala_sekolah' => 'Kepala Sekolah',
     ][$role] ?? 'Pengguna';
 }
+
+/** Return safe display defaults for a logged-in account. */
+function normalize_user_display_preferences(array $preferences): array
+{
+    $defaults = [
+        'tema' => 'sistem',
+        'ukuran_teks' => 'normal',
+        'kerapatan_tabel' => 'normal',
+        'sidebar_ciut' => 0,
+        'periode_grafik' => 'month',
+    ];
+
+    $allowed = [
+        'tema' => ['sistem', 'terang', 'gelap'],
+        'ukuran_teks' => ['kecil', 'normal', 'besar'],
+        'kerapatan_tabel' => ['ringkas', 'normal', 'nyaman'],
+        'periode_grafik' => ['month', '3months', '6months', '12months'],
+    ];
+
+    foreach ($allowed as $key => $values) {
+        $candidate = (string) ($preferences[$key] ?? $defaults[$key]);
+        $defaults[$key] = in_array($candidate, $values, true) ? $candidate : $defaults[$key];
+    }
+
+    $defaults['sidebar_ciut'] = (int) (($preferences['sidebar_ciut'] ?? 0) === 1
+        || ($preferences['sidebar_ciut'] ?? 0) === '1');
+
+    return $defaults;
+}
+
+/** Read personal display settings; missing rows use safe application defaults. */
+function user_display_preferences(PDO $pdo, ?int $userId = null): array
+{
+    $userId ??= (int) ($_SESSION['user_id'] ?? 0);
+    if ($userId < 1) {
+        return normalize_user_display_preferences([]);
+    }
+
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT tema, ukuran_teks, kerapatan_tabel, sidebar_ciut, periode_grafik
+             FROM preferensi_pengguna
+             WHERE user_id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$userId]);
+        return normalize_user_display_preferences($stmt->fetch() ?: []);
+    } catch (PDOException) {
+        // Halaman tetap dapat dibuka saat skema preferensi belum tersedia.
+        return normalize_user_display_preferences([]);
+    }
+}
+
+/** Persist only validated personal appearance preferences for the current account. */
+function save_user_display_preferences(PDO $pdo, int $userId, array $preferences): void
+{
+    if ($userId < 1) {
+        throw new InvalidArgumentException('Akun preferensi tidak valid.');
+    }
+
+    $normalized = normalize_user_display_preferences($preferences);
+    $stmt = $pdo->prepare(
+        'INSERT INTO preferensi_pengguna
+            (user_id, tema, ukuran_teks, kerapatan_tabel, sidebar_ciut, periode_grafik)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+            tema = VALUES(tema),
+            ukuran_teks = VALUES(ukuran_teks),
+            kerapatan_tabel = VALUES(kerapatan_tabel),
+            sidebar_ciut = VALUES(sidebar_ciut),
+            periode_grafik = VALUES(periode_grafik)'
+    );
+    $stmt->execute([
+        $userId,
+        $normalized['tema'],
+        $normalized['ukuran_teks'],
+        $normalized['kerapatan_tabel'],
+        $normalized['sidebar_ciut'],
+        $normalized['periode_grafik'],
+    ]);
+}
+
 // Centralize read permissions so navigation visibility and route checks use the same policy.
 function can_view_module(string $module): bool
 {
@@ -211,6 +293,9 @@ function can_view_module(string $module): bool
     if ($module === 'notifikasi') {
         return in_array(current_role(), ['admin', 'operator', 'guru', 'siswa', 'kepala_sekolah'], true);
     }
+    if ($module === 'pesan_masuk') return current_role() === 'admin';
+    if ($module === 'ppdb_admin') return current_role() === 'admin';
+    if ($module === 'portal_admin' || str_starts_with($module, 'portal_')) return current_role() === 'admin';
     if ($module === 'prestasi') {
         return in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true);
     }

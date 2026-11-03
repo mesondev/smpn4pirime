@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/_common.php';
+require_once __DIR__ . '/_public_sections.php';
 $portalProfile = portal_profile($pdo);
 $publicStats = portal_public_stats($pdo);
 $activePage = 'home';
@@ -8,6 +9,16 @@ $notices = portal_rows($pdo, "SELECT id,judul,isi,COALESCE(mulai_tayang,DATE(cre
 $portalNewsReady = portal_schema_ready($pdo, 'berita_sekolah', ['id', 'judul', 'ringkasan', 'isi', 'kategori', 'gambar_url', 'status', 'published_at', 'created_at']);
 $stories = $portalNewsReady ? portal_rows($pdo, "SELECT id,judul,ringkasan,isi,kategori,gambar_url,COALESCE(published_at,created_at) AS tanggal FROM berita_sekolah WHERE status='Terbit' ORDER BY COALESCE(published_at,created_at) DESC,id DESC LIMIT 3") : [];
 $events = portal_rows($pdo, "SELECT judul,kategori,tanggal_mulai,tanggal_selesai,deskripsi FROM kalender_akademik WHERE tampil_publik=1 AND status<>'Dibatalkan' AND COALESCE(tanggal_selesai,tanggal_mulai)>=CURDATE() ORDER BY tanggal_mulai LIMIT 4");
+$galleryReady = portal_schema_ready($pdo, 'galeri_sekolah', ['id', 'judul', 'keterangan', 'gambar_url', 'tanggal_kegiatan', 'status', 'created_at']);
+$galleryItems = $galleryReady ? portal_rows($pdo, "SELECT id,judul,keterangan,gambar_url,tanggal_kegiatan FROM galeri_sekolah WHERE status='Terbit' ORDER BY tanggal_kegiatan DESC,id DESC LIMIT 3") : [];
+$homepageIllustrations = array_slice(public_gallery_images(), 0, 3);
+$galleryItems = array_values(array_filter($galleryItems, static fn(array $photo): bool => portal_image($photo['gambar_url'] ?? '', 'galeri', (int)($photo['id'] ?? 0)) !== ''));
+$publicExtrasReady = portal_schema_ready($pdo, 'portal_ekstrakurikuler', ['nama', 'status', 'urutan']);
+$publicExtras = $publicExtrasReady ? portal_rows($pdo, "SELECT nama,kategori,jadwal FROM portal_ekstrakurikuler WHERE status='Terbit' ORDER BY urutan,nama LIMIT 3") : [];
+$publicAwardsReady = portal_schema_ready($pdo, 'portal_prestasi_publik', ['judul', 'penerima', 'status', 'bukti_terverifikasi', 'izin_publikasi']);
+$publicAwards = $publicAwardsReady ? portal_rows($pdo, "SELECT judul,penerima,tanggal FROM portal_prestasi_publik WHERE status='Terbit' AND bukti_terverifikasi=1 AND izin_publikasi=1 ORDER BY tanggal DESC,id DESC LIMIT 2") : [];
+$publicDownloadsReady = portal_schema_ready($pdo, 'portal_dokumen_publik', ['judul', 'kategori', 'nama_file', 'status']);
+$publicDownloads = $publicDownloadsReady ? portal_rows($pdo, "SELECT id,judul,kategori FROM portal_dokumen_publik WHERE status='Terbit' AND (published_at IS NULL OR published_at<=NOW()) ORDER BY published_at DESC,id DESC LIMIT 3") : [];
 require __DIR__ . '/_header.php'; ?>
 
 <?php
@@ -38,6 +49,7 @@ $heroSlides = [
     </div>
     <button class="hero-arrow hero-arrow--prev" type="button" data-hero-prev aria-label="Slide sebelumnya"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
     <button class="hero-arrow hero-arrow--next" type="button" data-hero-next aria-label="Slide berikutnya"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+    <button class="hero-toggle" type="button" data-hero-toggle aria-label="Jeda slideshow" aria-pressed="false"><i class="bi bi-pause-fill" aria-hidden="true"></i><span>Jeda</span></button>
     <div class="hero-pagination" role="group" aria-label="Pilih slide sorotan">
         <?php foreach ($heroSlides as $slideIndex => $slide): ?>
             <button type="button" data-hero-dot="<?= $slideIndex ?>" aria-label="Tampilkan slide <?= $slideIndex + 1 ?>" aria-pressed="<?= $slideIndex === 0 ? 'true' : 'false' ?>" class="<?= $slideIndex === 0 ? 'is-active' : '' ?>"></button>
@@ -86,7 +98,40 @@ $heroSlides = [
                 </span>
                 <h3>Direktori Guru</h3>
                 <p>Profil tenaga pendidik yang telah disetujui.</p>
+            </a><a class="tile" href="akademik.php">
+                <span class="tile-icon"><i class="bi bi-journal-bookmark-fill" aria-hidden="true"></i></span>
+                <h3>Informasi Akademik</h3>
+                <p>Ringkasan peserta didik, agenda, dan program pembelajaran.</p>
+            </a><a class="tile" href="galeri.php">
+                <span class="tile-icon"><i class="bi bi-images" aria-hidden="true"></i></span>
+                <h3>Galeri Sekolah</h3>
+                <p>Dokumentasi kegiatan yang telah disetujui untuk publikasi.</p>
             </a>
+        </div>
+    </div>
+</section>
+<section class="section section-soft">
+    <div class="wrap">
+        <div class="section-head">
+            <div><span class="kicker">Program dan layanan</span>
+                <h2>Ruang untuk belajar dan berkembang</h2>
+                <p>Temukan kegiatan sekolah, pencapaian yang telah disetujui, serta layanan penerimaan peserta didik.</p>
+            </div>
+        </div>
+        <div class="cards public-feature-grid">
+            <article class="card public-feature-card"><span class="tile-icon"><i class="bi bi-stars" aria-hidden="true"></i></span>
+                <h2>Ekstrakurikuler</h2><?php if ($publicExtras): ?><ul class="home-public-list"><?php foreach ($publicExtras as $extra): ?><li><strong><?= e($extra['nama']) ?></strong><span><?= e($extra['kategori'] ?: ($extra['jadwal'] ?: 'Kegiatan sekolah')) ?></span></li><?php endforeach; ?></ul><?php else: ?><p>Informasi kegiatan akan muncul setelah dipublikasikan sekolah.</p><?php endif; ?><a class="text-link" href="ekstrakurikuler.php">Lihat kegiatan <i class="bi bi-arrow-right"></i></a>
+            </article>
+            <article class="card public-feature-card"><span class="tile-icon"><i class="bi bi-award-fill" aria-hidden="true"></i></span>
+                <h2>Prestasi sekolah</h2><?php if ($publicAwards): ?><ul class="home-public-list"><?php foreach ($publicAwards as $award): ?><li><strong><?= e($award['judul']) ?></strong><span><?= e($award['penerima']) ?><?= $award['tanggal'] ? ' · ' . e(portal_date($award['tanggal'], 'Y')) : '' ?></span></li><?php endforeach; ?></ul><?php else: ?><p>Prestasi yang sudah diverifikasi dan disetujui akan ditampilkan di sini.</p><?php endif; ?><a class="text-link" href="prestasi.php">Lihat prestasi <i class="bi bi-arrow-right"></i></a>
+            </article>
+            <article class="card public-feature-card"><span class="tile-icon"><i class="bi bi-mortarboard-fill" aria-hidden="true"></i></span>
+                <h2>PPDB / SPMB</h2>
+                <p><?= portal_row($pdo, "SELECT id FROM ppdb_periode WHERE status='Terbit' AND mulai<=CURDATE() AND selesai>=CURDATE() LIMIT 1") ? 'Periode pendaftaran sedang dibuka. Periksa informasi dan persyaratan resmi.' : 'Informasi pendaftaran tersedia saat sekolah menerbitkan periode resmi.' ?></p><a class="text-link" href="ppdb.php">Informasi pendaftaran <i class="bi bi-arrow-right"></i></a><a class="text-link" href="cek_pendaftaran.php">Cek status permohonan <i class="bi bi-search"></i></a>
+            </article>
+            <article class="card public-feature-card"><span class="tile-icon"><i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i></span>
+                <h2>Pusat unduhan</h2><?php if ($publicDownloads): ?><ul class="home-public-list"><?php foreach ($publicDownloads as $doc): ?><li><a href="../media/public_document.php?id=<?= (int)$doc['id'] ?>"><?= e($doc['judul']) ?></a><span><?= e($doc['kategori']) ?></span></li><?php endforeach; ?></ul><?php else: ?><p>Dokumen resmi yang siap dibagikan akan tersedia di pusat unduhan.</p><?php endif; ?><a class="text-link" href="unduhan.php">Semua dokumen <i class="bi bi-arrow-right"></i></a>
+            </article>
         </div>
     </div>
 </section>
@@ -102,11 +147,11 @@ $heroSlides = [
                     <h2>Pengumuman</h2>
                 </div><a class="text-link" href="pengumuman.php">Lihat semua →</a>
             </div>
-            <div class="notice-list"><?php if (!$notices): ?><div class="empty">Belum ada pengumuman publik.</div><?php else: foreach ($notices as $n): ?><a class="notice-item" href="detail_pengumuman.php?id=<?= (int)$n['id'] ?>"><span class="date-label"><?= e(portal_date($n['tanggal'])) ?></span>
-                            <h3><?= e($n['judul']) ?></h3>
-                            <p><?= e(portal_excerpt($n['isi'], 110)) ?></p>
-                        </a><?php endforeach;
-                                                                                                                endif; ?></div>
+            <div class="notice-list"><?php if (!$notices): ?><?php public_empty_panel('megaphone', 'Belum ada pengumuman terbaru', 'Pengumuman sekolah akan ditampilkan di sini setelah diterbitkan.'); ?><?php else: foreach ($notices as $n): ?><a class="notice-item" href="detail_pengumuman.php?id=<?= (int)$n['id'] ?>"><span class="date-label"><?= e(portal_date($n['tanggal'])) ?></span>
+                    <h3><?= e($n['judul']) ?></h3>
+                    <p><?= e(portal_excerpt($n['isi'], 110)) ?></p>
+                </a><?php endforeach;
+                                                                                                                                                                                                        endif; ?></div>
         </div>
     </div>
 </section>
@@ -117,12 +162,12 @@ $heroSlides = [
             <div><span class="kicker">Cerita sekolah</span>
                 <h2>Berita dan kegiatan</h2>
             </div><a class="text-link" href="berita.php">Jelajahi berita →</a>
-        </div><?php if (!$portalNewsReady): ?><div class="schema-alert">Fitur berita belum aktif. Administrator perlu mengimpor migrasi portal publik ke database.</div><?php endif; ?><div class="cards"><?php if (!$stories && $portalNewsReady): ?><div class="empty" style="grid-column:1/-1">Berita sekolah akan tampil di sini setelah diterbitkan.</div><?php else: foreach ($stories as $s): $img = portal_image($s['gambar_url'], 'berita', (int)$s['id']); ?><article class="card story-card"><?php if ($img): ?><img class="story-image" src="<?= e($img) ?>" alt="<?= e($s['judul']) ?>" loading="lazy"><?php else: ?><div class="story-image" aria-hidden="true"></div><?php endif; ?><div class="story-body"><span class="date-label"><?= e($s['kategori']) ?> · <?= e(portal_date($s['tanggal'])) ?></span>
-                            <h3><a href="detail_berita.php?id=<?= (int)$s['id'] ?>"><?= e($s['judul']) ?></a></h3>
-                            <p><?= e(portal_excerpt($s['ringkasan'] ?: $s['isi'], 130)) ?></p>
-                        </div>
-                    </article><?php endforeach;
-                                                                                                                                                                                                                                                                                                                                                            endif; ?></div>
+        </div><?php if (!$portalNewsReady): ?><?php public_service_notice('Informasi berita sedang tidak tersedia. Silakan kunjungi kembali nanti atau hubungi sekolah untuk mendapatkan kabar terbaru.'); ?><?php endif; ?><div class="cards"><?php if (!$stories && $portalNewsReady): ?><?php public_empty_panel('journal-text', 'Belum ada berita untuk ditampilkan', 'Berita terbaru akan muncul setelah dipublikasikan oleh pengelola sekolah.'); ?><?php else: foreach ($stories as $s): $img = portal_image($s['gambar_url'], 'berita', (int)$s['id']); ?><article class="card story-card"><?php if ($img): ?><img class="story-image" src="<?= e($img) ?>" alt="<?= e($s['judul']) ?>" loading="lazy"><?php else: ?><div class="story-image" aria-hidden="true"></div><?php endif; ?><div class="story-body"><span class="date-label"><?= e($s['kategori']) ?> · <?= e(portal_date($s['tanggal'])) ?></span>
+                    <h3><a href="detail_berita.php?id=<?= (int)$s['id'] ?>"><?= e($s['judul']) ?></a></h3>
+                    <p><?= e(portal_excerpt($s['ringkasan'] ?: $s['isi'], 130)) ?></p>
+                </div>
+            </article><?php endforeach;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                        endif; ?></div>
     </div>
 </section>
 
@@ -133,14 +178,40 @@ $heroSlides = [
                 <h2>Agenda terdekat</h2>
             </div><a class="text-link" href="agenda.php">Kalender lengkap →</a>
         </div>
-        <div class="card"><?php if (!$events): ?><div class="empty">Belum ada agenda publik mendatang.</div><?php else: foreach ($events as $ev): ?><div class="agenda-row">
-                        <div class="agenda-date"><?= e(portal_date($ev['tanggal_mulai'], 'd M')) ?><?= $ev['tanggal_selesai'] ? ' – ' . e(portal_date($ev['tanggal_selesai'], 'd M')) : '' ?></div>
-                        <div>
-                            <h3><?= e($ev['judul']) ?></h3>
-                            <p><?= e($ev['kategori']) ?><?= $ev['deskripsi'] ? ' · ' . e(portal_excerpt($ev['deskripsi'], 120)) : '' ?></p>
-                        </div>
-                    </div><?php endforeach;
-                                                                                                        endif; ?></div>
+        <div class="card agenda-card"><?php if (!$events): ?><?php public_empty_panel('calendar2-event', 'Belum ada agenda terdekat', 'Agenda yang telah disetujui sekolah akan muncul di bagian ini.'); ?><?php else: foreach ($events as $ev): ?><div class="agenda-row">
+                <div class="agenda-date"><?= e(portal_date($ev['tanggal_mulai'], 'd M')) ?><?= $ev['tanggal_selesai'] ? ' – ' . e(portal_date($ev['tanggal_selesai'], 'd M')) : '' ?></div>
+                <div>
+                    <h3><?= e($ev['judul']) ?></h3>
+                    <p><?= e($ev['kategori']) ?><?= $ev['deskripsi'] ? ' · ' . e(portal_excerpt($ev['deskripsi'], 120)) : '' ?></p>
+                </div>
+            </div><?php endforeach;
+                                                                                                                                                                                                        endif; ?></div>
+    </div>
+</section>
+<section class="section">
+    <div class="wrap">
+        <div class="section-head">
+            <div><span class="kicker">Galeri pembelajaran</span>
+                <h2>Kegiatan belajar dan berkembang</h2>
+                <p>Dokumentasi resmi akan ditampilkan setelah disetujui. Foto berlabel ilustrasi adalah gambar pendukung, bukan dokumentasi sekolah.</p>
+            </div><a class="text-link" href="galeri.php">Buka galeri <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        </div>
+        <div class="cards home-gallery-cards">
+            <?php foreach ($galleryItems as $photo): $image = portal_image($photo['gambar_url'], 'galeri', (int)$photo['id']);
+                if (!$image) continue; ?><a class="card home-gallery-card" href="galeri.php"><img src="<?= e($image) ?>" alt="Dokumentasi sekolah: <?= e($photo['judul']) ?>" loading="lazy" decoding="async"><span><strong><?= e($photo['judul']) ?></strong><small><?= e(portal_date($photo['tanggal_kegiatan'])) ?> · dokumentasi sekolah</small></span></a><?php endforeach; ?>
+            <?php foreach ($homepageIllustrations as $image): ?><a class="card home-gallery-card home-gallery-card--illustration" href="galeri.php"><img src="<?= e($image['src']) ?>" alt="<?= e($image['category'] . ': ' . $image['title']) ?>" loading="lazy" decoding="async"><span><strong><?= e($image['title']) ?></strong><small>Ilustrasi · bukan foto kegiatan sekolah</small></span></a><?php endforeach; ?>
+        </div>
+    </div>
+</section>
+<section class="section section-soft home-contact-section">
+    <div class="wrap home-contact-panel">
+        <div><span class="kicker">Kunjungi dan hubungi kami</span>
+            <h2>Informasi lokasi <?= e($portalProfile['nama']) ?></h2>
+            <p><?= e($portalProfile['alamat'] ?: 'Alamat sekolah belum diatur.') ?></p>
+            <div class="button-row"><a class="btn-primary" href="kontak.php#contactMapTitle">Lihat lokasi <i class="bi bi-geo-alt-fill" aria-hidden="true"></i></a><?php $homePhone = portal_phone_uri($portalProfile['telepon'] ?? null);
+                                                                                                                                                                    if ($homePhone !== ''): ?><a class="btn-light" href="tel:<?= e($homePhone) ?>">Telepon sekolah</a><?php endif; ?></div>
+        </div>
+        <div class="home-contact-icon" aria-hidden="true"><i class="bi bi-geo-alt-fill"></i><span></span></div>
     </div>
 </section>
 <?php require __DIR__ . '/_footer.php';

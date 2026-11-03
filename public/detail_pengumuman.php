@@ -12,7 +12,7 @@ require __DIR__ . '/_header.php'; ?>
     <div class="wrap">
         <span class="eyebrow">Pengumuman</span>
         <h1><?= e($item['judul'] ?? 'Informasi tidak ditemukan') ?></h1>
-            <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
+        <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
     </div>
 </section>
 

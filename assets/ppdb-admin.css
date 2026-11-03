@@ -1,0 +1,72 @@
+/* Gaya halaman pengelolaan PPDB; komponen utama mengikuti Bootstrap SIMS. */
+.ppdb-admin-page { max-width: 1500px; margin-inline: auto; padding: .5rem 0 2rem; }
+.ppdb-admin-heading, .ppdb-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.ppdb-admin-heading { margin: .25rem 0 1.25rem; }
+.ppdb-admin-heading h1 { margin: .25rem 0; font-size: clamp(1.45rem, 3vw, 2rem); font-weight: 800; letter-spacing: -.035em; }
+.ppdb-admin-heading p, .ppdb-panel-heading p { margin: 0; color: var(--muted, #718096); }
+.ppdb-admin-eyebrow { color: #2470c5; font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.ppdb-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .85rem; margin-bottom: 1rem; }
+.ppdb-summary-card { display: grid; gap: .2rem; padding: 1rem 1.15rem; border: 1px solid var(--line, #e4eaf1); border-radius: 1rem; background: var(--surface, #fff); box-shadow: 0 8px 24px rgb(25 48 78 / 5%); }
+.ppdb-summary-card > span { color: var(--muted, #718096); font-size: .8rem; font-weight: 650; }
+.ppdb-summary-card strong { color: var(--ink, #172b4d); font-size: 1.75rem; font-weight: 800; line-height: 1.15; }
+.ppdb-summary-card small { color: var(--muted, #718096); font-size: .75rem; }
+.ppdb-admin-tabs { display: flex; gap: .35rem; margin: 1.2rem 0 .85rem; padding: .35rem; border: 1px solid var(--line, #e4eaf1); border-radius: .9rem; background: var(--surface, #fff); }
+.ppdb-admin-tabs a { display: inline-flex; align-items: center; gap: .55rem; padding: .7rem .9rem; border-radius: .65rem; color: var(--ink, #172b4d); font-size: .9rem; font-weight: 700; text-decoration: none; }
+.ppdb-admin-tabs a:hover, .ppdb-admin-tabs a.is-active { background: #eaf2ff; color: #185bb4; }
+.ppdb-admin-tabs a span { padding: .1rem .45rem; border-radius: 999px; background: rgb(22 91 180 / 10%); font-size: .75rem; }
+.ppdb-admin-panel { min-width: 0; padding: clamp(1rem, 2.2vw, 1.4rem); border: 1px solid var(--line, #e4eaf1); border-radius: 1rem; box-shadow: 0 8px 24px rgb(25 48 78 / 5%); }
+.ppdb-panel-heading { align-items: flex-start; margin-bottom: 1rem; }
+.ppdb-panel-heading h2 { margin: .1rem 0 .25rem; font-size: 1.1rem; font-weight: 800; }
+.ppdb-panel-heading p { font-size: .84rem; }
+.ppdb-admin-columns { display: grid; grid-template-columns: minmax(300px, .9fr) minmax(0, 1.1fr); align-items: start; gap: 1rem; }
+.ppdb-period-form { display: grid; gap: .85rem; }
+.ppdb-period-form label, .ppdb-status-form label, .ppdb-filter-form label { display: grid; gap: .35rem; min-width: 0; font-size: .84rem; font-weight: 700; }
+.ppdb-date-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.ppdb-period-list { display: grid; gap: .7rem; }
+.ppdb-period-item { display: grid; gap: .4rem; padding: .85rem; border: 1px solid var(--line, #e4eaf1); border-radius: .8rem; }
+.ppdb-period-item > div { align-items: flex-start; }
+.ppdb-period-item small { color: var(--muted, #718096); }
+.ppdb-filter-form { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(150px, .8fr) minmax(190px, 1fr) auto; align-items: end; gap: .75rem; }
+.ppdb-applicant-table { min-width: 760px; margin-bottom: 0; }
+.ppdb-applicant-table th { color: var(--muted, #718096); font-size: .76rem; font-weight: 750; white-space: nowrap; }
+.ppdb-applicant-table td { font-size: .87rem; }
+.ppdb-applicant-table td small { display: block; margin-top: .2rem; color: var(--muted, #718096); font-size: .76rem; }
+.ppdb-applicant-detail { margin-bottom: 1rem; scroll-margin-top: 1rem; }
+.ppdb-private-data-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; margin-bottom: 1rem; }
+.ppdb-private-data-grid > div { display: grid; gap: .2rem; padding: .75rem; border-radius: .75rem; background: var(--canvas, #f5f7fa); overflow-wrap: anywhere; }
+.ppdb-private-data-grid span { color: var(--muted, #718096); font-size: .74rem; }
+.ppdb-private-data-grid strong { font-size: .88rem; }
+.ppdb-detail-columns { display: grid; grid-template-columns: minmax(250px, .9fr) minmax(0, 1.1fr); gap: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--line, #e4eaf1); }
+.ppdb-status-form { display: grid; align-content: start; gap: .8rem; }
+.ppdb-history h3 { margin: 0 0 .6rem; font-size: 1rem; font-weight: 800; }
+.ppdb-history ol { display: grid; gap: .65rem; margin: 0; padding-left: 1.2rem; }
+.ppdb-history li { padding-left: .2rem; }
+.ppdb-history li strong, .ppdb-history li small { display: block; }
+.ppdb-history li small { margin-top: .15rem; color: var(--muted, #718096); }
+.ppdb-history li p { margin: .3rem 0 0; overflow-wrap: anywhere; }
+.ppdb-empty-state { padding: 1.5rem 1rem; border: 1px dashed var(--line, #cbd5e1); border-radius: .8rem; color: var(--muted, #718096); text-align: center; }
+.ppdb-pagination { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-top: .9rem; color: var(--muted, #718096); font-size: .82rem; }
+.ppdb-pagination > div { display: flex; gap: .4rem; }
+.ppdb-privacy-note { display: flex; align-items: flex-start; gap: .55rem; margin: 1rem 0 0; color: var(--muted, #718096); font-size: .8rem; }
+.ppdb-privacy-note i { color: #2368c8; }
+
+@media (max-width: 1000px) {
+    .ppdb-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ppdb-admin-columns { grid-template-columns: 1fr; }
+    .ppdb-filter-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ppdb-search-field { grid-column: 1 / -1; }
+}
+
+@media (max-width: 640px) {
+    .ppdb-admin-heading { align-items: flex-start; flex-direction: column; }
+    .ppdb-admin-heading .btn { width: 100%; }
+    .ppdb-admin-tabs { overflow-x: auto; }
+    .ppdb-admin-tabs a { flex: 0 0 auto; }
+    .ppdb-filter-form, .ppdb-private-data-grid, .ppdb-detail-columns, .ppdb-date-grid { grid-template-columns: 1fr; }
+    .ppdb-search-field { grid-column: auto; }
+    .ppdb-pagination { align-items: flex-start; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ppdb-admin-page *, .ppdb-admin-page *::before, .ppdb-admin-page *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

@@ -19,6 +19,7 @@ if ($role === 'siswa') return [
         ['label' => 'Notifikasi', 'icon' => 'bi-bell', 'module' => 'notifikasi'],
     ],
     'Pengaturan Akun' => [
+        ['label' => 'Pengaturan', 'icon' => 'bi-gear', 'href' => 'settings.php'],
         ['label' => 'Keamanan Akun', 'icon' => 'bi-shield-lock', 'href' => 'profile.php'],
     ],
 ];
@@ -35,6 +36,7 @@ if ($role === 'guru') return [
         ['label' => 'Pengumpulan Tugas', 'icon' => 'bi-inbox', 'href' => 'learning.php?view=pengumpulan'],
     ],
     'Akun & Informasi' => [
+        ['label' => 'Pengaturan', 'icon' => 'bi-gear', 'href' => 'settings.php'],
         ['label' => 'Profil Saya', 'icon' => 'bi-person-circle', 'href' => 'profile.php'],
         ['label' => 'Biodata Saya', 'icon' => 'bi-card-text', 'href' => 'biodata.php'],
         ['label' => 'Pengumuman', 'icon' => 'bi-megaphone', 'href' => 'public/pengumuman.php'],
@@ -67,6 +69,7 @@ if ($role === 'operator') return [
         ['label' => 'Prestasi Siswa', 'icon' => 'bi-award', 'module' => 'prestasi'],
     ],
     'Akun' => [
+        ['label' => 'Pengaturan', 'icon' => 'bi-gear', 'href' => 'settings.php'],
         ['label' => 'Profil Saya', 'icon' => 'bi-person-circle', 'href' => 'profile.php'],
         ['label' => 'Biodata Saya', 'icon' => 'bi-card-text', 'href' => 'biodata.php'],
         ['label' => 'Verifikasi Biodata', 'icon' => 'bi-person-check', 'href' => 'biodata.php'],
@@ -90,6 +93,7 @@ if ($role === 'kepala_sekolah') return [
         ['label' => 'Notifikasi', 'icon' => 'bi-bell-fill', 'module' => 'notifikasi'],
     ],
     'Akun' => [
+        ['label' => 'Pengaturan', 'icon' => 'bi-gear', 'href' => 'settings.php'],
         ['label' => 'Profil dan Keamanan', 'icon' => 'bi-person-circle', 'href' => 'profile.php'],
         ['label' => 'Biodata Saya', 'icon' => 'bi-card-text', 'href' => 'biodata.php'],
         ['label' => 'Website Publik', 'icon' => 'bi-globe2', 'href' => 'public/index.php'],
@@ -98,6 +102,18 @@ if ($role === 'kepala_sekolah') return [
 return [
     'Utama' => [
         ['label' => 'Dashboard', 'icon' => 'bi-grid-1x2-fill', 'href' => 'index.php'],
+    ],
+    'Layanan Publik' => [
+        ['label' => 'Ringkasan Portal', 'icon' => 'bi-globe2', 'module' => 'portal_admin'],
+        ['label' => 'Pesan Masuk', 'icon' => 'bi-chat-left-text-fill', 'module' => 'pesan_masuk'],
+        ['label' => 'Pengelolaan PPDB', 'icon' => 'bi-person-vcard-fill', 'module' => 'ppdb_admin'],
+        ['label' => 'Ekstrakurikuler Publik', 'icon' => 'bi-stars', 'module' => 'portal_ekstrakurikuler'],
+        ['label' => 'Fasilitas Publik', 'icon' => 'bi-buildings', 'module' => 'portal_fasilitas'],
+        ['label' => 'Struktur Publik', 'icon' => 'bi-diagram-3', 'module' => 'portal_struktur_sekolah'],
+        ['label' => 'Prestasi Publik', 'icon' => 'bi-award', 'module' => 'portal_prestasi_publik'],
+        ['label' => 'Jadwal Publik', 'icon' => 'bi-calendar-week', 'module' => 'portal_jadwal_publik'],
+        ['label' => 'Dokumen Publik', 'icon' => 'bi-file-earmark-pdf', 'module' => 'portal_dokumen_publik'],
+        ['label' => 'Media Sosial', 'icon' => 'bi-share', 'module' => 'portal_tautan_sosial'],
     ],
     'Operasional' => [
         ['label' => 'Kelas Berlangsung', 'icon' => 'bi-easel2-fill', 'module' => 'kelas_berlangsung'],
@@ -132,6 +148,7 @@ return [
         ['label' => 'Notifikasi', 'icon' => 'bi-bell-fill', 'module' => 'notifikasi'],
     ],
     'Kontrol Sistem' => [
+        ['label' => 'Pusat Pengaturan', 'icon' => 'bi-gear', 'href' => 'settings.php'],
         ['label' => 'Persetujuan Konten', 'icon' => 'bi-shield-check', 'href' => 'moderation.php', 'module' => 'moderasi_konten'],
         ['label' => 'Manajemen Pengguna', 'icon' => 'bi-person-gear', 'href' => 'users.php', 'module' => 'pengguna'],
         ['label' => 'Log Aktivitas', 'icon' => 'bi-clock-history', 'href' => 'activity.php'],

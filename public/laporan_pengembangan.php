@@ -10,7 +10,7 @@ require __DIR__ . '/_header.php'; ?>
         <h1>Laporan Pengembangan</h1>
         <p>Ringkasan layanan, fitur, dan peningkatan yang telah tersedia pada portal informasi
             <?= e($portalProfile['nama']) ?>, beserta hal yang masih perlu dikembangkan.</p>
-            <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
+        <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
     </div>
 </section>
 
@@ -68,6 +68,37 @@ require __DIR__ . '/_header.php'; ?>
             </div>
         </section>
 
+        <section class="dev-report-section" aria-labelledby="layanan-tambahan">
+            <span class="kicker">Layanan tambahan</span>
+            <h2 id="layanan-tambahan">Halaman publik yang baru dikembangkan</h2>
+            <div class="dev-report-grid">
+                <article class="dev-report-card"><span class="tile-icon"><i class="bi bi-stars"></i></span>
+                    <h3>Ekstrakurikuler</h3>
+                    <p>Daftar kegiatan dapat diterbitkan dengan keterangan pembina, jadwal, kategori, dan persyaratan setelah datanya disetujui sekolah.</p><a href="ekstrakurikuler.php">Buka kegiatan <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="dev-report-card"><span class="tile-icon"><i class="bi bi-diagram-3"></i></span>
+                    <h3>Struktur organisasi</h3>
+                    <p>Menampilkan nama dan jabatan yang telah dipublikasikan oleh sekolah.</p><a href="struktur.php">Buka struktur <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="dev-report-card"><span class="tile-icon"><i class="bi bi-buildings"></i></span>
+                    <h3>Fasilitas sekolah</h3>
+                    <p>Daftar sarana dan prasarana sekolah yang telah diperiksa.</p><a href="fasilitas.php">Buka fasilitas <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="dev-report-card"><span class="tile-icon"><i class="bi bi-award"></i></span>
+                    <h3>Prestasi terverifikasi</h3>
+                    <p>Prestasi hanya tampil apabila bukti telah diverifikasi dan izin publikasi tercatat.</p><a href="prestasi.php">Buka prestasi <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="dev-report-card"><span class="tile-icon"><i class="bi bi-file-earmark-arrow-down"></i></span>
+                    <h3>Pusat unduhan</h3>
+                    <p>Dokumen PDF yang disetujui dapat diunduh melalui pemeriksaan status publik dan lokasi file privat.</p><a href="unduhan.php">Buka unduhan <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="dev-report-card"><span class="tile-icon"><i class="bi bi-shield-lock"></i></span>
+                    <h3>Kebijakan privasi</h3>
+                    <p>Menjelaskan penggunaan data formulir kontak dan pendaftaran.</p><a href="privasi.php">Baca kebijakan <span aria-hidden="true">→</span></a>
+                </article>
+            </div>
+        </section>
+
         <section class="dev-report-section" aria-labelledby="peningkatan">
             <span class="kicker">Pengalaman dan pengelolaan</span>
             <h2 id="peningkatan">Peningkatan yang sudah diterapkan</h2>
@@ -96,8 +127,9 @@ require __DIR__ . '/_header.php'; ?>
             <h2 id="catatan-fitur">Hal yang perlu diketahui pengunjung</h2>
             <div class="dev-report-callout">
                 <p><strong>Isi portal mengikuti pembaruan sekolah.</strong> Jika suatu bagian belum berisi data, artinya konten belum tersedia atau belum diterbitkan oleh pengelola.</p>
-                <p><strong>PPDB daring belum tersedia pada halaman ini.</strong> Saat ini halaman PPDB berisi informasi dan rujukan kontak; jadwal, persyaratan, dan prosedur tahun berjalan perlu dikonfirmasi langsung kepada sekolah.</p>
-                <p><strong>Portal ini adalah kanal informasi.</strong> Pengunjung tidak diminta mengirim berkas pendaftaran atau data pribadi siswa melalui halaman PPDB.</p>
+                <p><strong>PPDB daring hanya dibuka untuk periode resmi.</strong> Formulir aktif jika sekolah mengisi dan menerbitkan periode pendaftaran. Pendaftar menerima nomor dan kunci rahasia untuk mengecek status.</p>
+                <p><strong>Dokumen pendaftaran tidak diunggah lewat portal.</strong> Berkas diserahkan mengikuti prosedur sekolah. Hasil seleksi tidak ditampilkan dalam daftar terbuka untuk melindungi data calon siswa.</p>
+                <p><strong>Konten dinamis perlu diisi oleh pengelola.</strong> Terapkan migrasi <code>database/migrations/2026_11_02_public_services.sql</code> terlebih dahulu. Setelah itu, data kegiatan, fasilitas, struktur, prestasi, dokumen, tautan sosial, dan periode PPDB perlu dimasukkan serta disetujui melalui pengelolaan database.</p>
             </div>
         </section>
 
@@ -106,7 +138,8 @@ require __DIR__ . '/_header.php'; ?>
             <h2 id="lanjutan">Prioritas berikutnya</h2>
             <ol class="dev-report-roadmap">
                 <li><strong>Lengkapi dan rutin perbarui konten.</strong> Tetapkan penanggung jawab serta jadwal pembaruan profil, berita, pengumuman, agenda, galeri, dan kontak.</li>
-                <li><strong>Siapkan layanan PPDB sesuai kebijakan sekolah.</strong> Publikasikan jadwal dan persyaratan yang telah diverifikasi; bila pendaftaran daring akan dibuat, siapkan alur, perlindungan data, dan petunjuk bantuan terlebih dahulu.</li>
+                <li><strong>Isi dan tinjau konten layanan baru.</strong> Masukkan data ekstrakurikuler, fasilitas, struktur, prestasi yang terverifikasi, dokumen PDF, dan tautan media sosial resmi.</li>
+                <li><strong>Aktifkan PPDB sesuai kebijakan sekolah.</strong> Terapkan migrasi layanan, masukkan periode dan persyaratan resmi, lakukan uji terbatas, serta pastikan petugas dapat menangani permohonan masuk.</li>
                 <li><strong>Perkuat aksesibilitas.</strong> Tinjau kontras warna, ukuran teks, teks alternatif gambar, navigasi papan ketik, dan penggunaan pembaca layar bersama pengguna.</li>
                 <li><strong>Perluas pemeriksaan sebelum rilis.</strong> Uji semua halaman dan alur berdasarkan peran pengguna pada perangkat ponsel dan komputer, lalu dokumentasikan hasil dan tindak lanjutnya.</li>
                 <li><strong>Jaga keberlanjutan layanan.</strong> Buat jadwal pencadangan dan uji pemulihan berkala, pantau tautan atau informasi kedaluwarsa, serta siapkan prosedur penanganan gangguan.</li>
