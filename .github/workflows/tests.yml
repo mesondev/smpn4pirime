@@ -10,6 +10,7 @@ permissions:
 jobs:
   php-tests:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -29,7 +30,28 @@ jobs:
       - name: Validate Composer configuration
         run: composer validate --no-check-publish
 
+      - name: Start PHP test server
+        run: |
+          nohup php -S 127.0.0.1:8000 -t "$GITHUB_WORKSPACE" \
+            > /tmp/sims-php-server.log 2>&1 &
+
+          for attempt in {1..30}; do
+            if curl -sS -o /dev/null \
+              http://127.0.0.1:8000/login.php; then
+              echo "PHP test server is ready."
+              exit 0
+            fi
+
+            sleep 1
+          done
+
+          echo "PHP test server failed to start."
+          cat /tmp/sims-php-server.log
+          exit 1
+
       - name: Run automated tests
         env:
+          SIMS_TEST_HTTP: '1'
+          SIMS_TEST_BASE_URL: 'http://127.0.0.1:8000'
           SIMS_TEST_DB: '0'
         run: composer test
