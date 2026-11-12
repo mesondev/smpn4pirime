@@ -23,9 +23,6 @@ $fieldColumns = array_keys($fields);
 $hasPhotoColumn = isset($schema['foto']);
 $hasPublicColumn = isset($schema['tampil_publik']);
 $canManage = can_manage_module('guru');
-$composerAutoload = __DIR__ . '/../vendor/autoload.php';
-if (is_file($composerAutoload)) require_once $composerAutoload;
-$spreadsheetAvailable = extension_loaded('zip') && class_exists(\PhpOffice\PhpSpreadsheet\IOFactory::class);
 $action = (string)($_GET['action'] ?? 'list');
 if ($action === 'list' && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_form_action'] ?? '') === 'save') $action = 'create';
 if ($action === 'create' && $_SERVER['REQUEST_METHOD'] !== 'POST') redirect('index.php?module=guru&open_add=1');
@@ -163,6 +160,97 @@ if ($action === 'export') {
     exit;
 }
 
+// Impor dua tahap: validasi/pratinjau terlebih dahulu, baru simpan setelah konfirmasi.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'import' && in_array((string)($_POST['_form_action'] ?? ''), ['import', 'import_upload', 'import_confirm', 'import_cancel'], true)) {
+    require_module_access('guru', true);
+    verify_csrf();
+    $postImportAction = (string)$_POST['_form_action'];
+    $stagingKey = '_guru_import_staging';
+    if ($postImportAction === 'import_cancel') {
+        $cancelToken = (string)($_POST['import_token'] ?? '');
+        if ($cancelToken !== '') unset($_SESSION[$stagingKey][$cancelToken]);
+        flash('Pratinjau impor dibatalkan. Tidak ada data yang disimpan.');
+        redirect('index.php?module=guru');
+    }
+    if ($postImportAction === 'import_confirm') {
+        $confirmToken = (string)($_POST['import_token'] ?? '');
+        $stage = $_SESSION[$stagingKey][$confirmToken] ?? null;
+        if (!preg_match('/^[a-f0-9]{32}$/', $confirmToken) || !is_array($stage) || (int)($stage['user_id'] ?? 0) !== (int)$_SESSION['user_id'] || (int)($stage['expires_at'] ?? 0) < time()) {
+            unset($_SESSION[$stagingKey][$confirmToken]);
+            flash('Pratinjau impor tidak ditemukan atau sudah kedaluwarsa. Unggah file kembali.', 'warning');
+            redirect('index.php?module=guru&action=import');
+        }
+        $validImportRows = array_values(array_filter($stage['rows'], static fn(array $row): bool => !empty($row['valid'])));
+        $inserted = 0;
+        $skipped = 0;
+        try {
+            $pdo->beginTransaction();
+            $columns = array_map('guru_sql_identifier', $fieldColumns);
+            $insert = $pdo->prepare('INSERT INTO guru (' . implode(',', $columns) . ') VALUES (' . implode(',', array_fill(0, count($fieldColumns), '?')) . ')');
+            foreach ($validImportRows as $row) {
+                $values = $row['values'];
+                if (guru_duplicate_nip($pdo, $values['nip'] ?? null)) { $skipped++; continue; }
+                $insert->execute(array_map(static fn(string $key) => $values[$key] ?? null, $fieldColumns));
+                $inserted++;
+            }
+            $pdo->commit();
+            if ($inserted > 0) record_activity($pdo, 'impor', 'guru', null, $inserted . ' data baru');
+            unset($_SESSION[$stagingKey][$confirmToken]);
+            flash("Impor selesai: {$inserted} guru ditambahkan, {$skipped} NIP yang baru terdeteksi ganda dilewati.");
+            redirect('index.php?module=guru');
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            app_log('error', 'Guru CSV import transaction failed', ['type' => get_class($exception)]);
+            flash('Impor dibatalkan karena penyimpanan gagal. Tidak ada perubahan impor yang disimpan.', 'danger');
+            redirect('index.php?module=guru&action=import&preview=' . rawurlencode($confirmToken));
+        }
+    }
+
+    $upload = $_FILES['csv_file'] ?? null;
+    if (!$upload || (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string)($upload['tmp_name'] ?? '')) || (int)($upload['size'] ?? 0) < 1 || (int)$upload['size'] > 5 * 1024 * 1024 || strtolower(pathinfo((string)$upload['name'], PATHINFO_EXTENSION)) !== 'csv') {
+        flash('Pilih CSV UTF-8 valid dengan ukuran maksimal 5 MB.', 'danger');
+        redirect('index.php?module=guru&action=import');
+    }
+    $stream = fopen((string)$upload['tmp_name'], 'rb');
+    if (!$stream) { flash('File CSV tidak dapat dibaca.', 'danger'); redirect('index.php?module=guru&action=import'); }
+    $firstLine = (string)fgets($stream);
+    $delimiter = substr_count($firstLine, ';') > substr_count($firstLine, ',') ? ';' : ',';
+    rewind($stream);
+    $rawHeader = fgetcsv($stream, 0, $delimiter, '"', '');
+    $aliases = ['nip'=>'nip','nama'=>'nama','namalengkap'=>'nama','jeniskelamin'=>'jenis_kelamin','jk'=>'jenis_kelamin','telepon'=>'telepon','nohp'=>'telepon','nomorhp'=>'telepon','email'=>'email','alamat'=>'alamat','status'=>'status'];
+    $headerMap = [];
+    foreach ((array)$rawHeader as $columnIndex => $label) {
+        $normalized = mb_strtolower((string)preg_replace('/[\s_-]+/u', '', preg_replace('/^\xEF\xBB\xBF/', '', trim((string)$label))), 'UTF-8');
+        if (isset($aliases[$normalized], $fields[$aliases[$normalized]])) $headerMap[$aliases[$normalized]] = $columnIndex;
+    }
+    if (!isset($headerMap['nama'], $headerMap['jenis_kelamin'])) { fclose($stream); flash('Header CSV wajib memuat Nama dan Jenis Kelamin (atau JK).', 'danger'); redirect('index.php?module=guru&action=import'); }
+    $stageRows = [];
+    $line = 1;
+    while (($raw = fgetcsv($stream, 0, $delimiter, '"', '')) !== false) {
+        $line++;
+        if (!array_filter($raw, static fn($value): bool => trim((string)$value) !== '')) continue;
+        if (count($stageRows) >= 1000) { fclose($stream); flash('CSV melebihi batas 1.000 baris. Tidak ada data yang disimpan.', 'danger'); redirect('index.php?module=guru&action=import'); }
+        $input = [];
+        foreach ($headerMap as $key => $columnIndex) $input[$key] = trim((string)($raw[$columnIndex] ?? ''));
+        [$values, $rowErrors] = guru_validate_values($input, $fields, $schema);
+        if (count($raw) !== count($rawHeader)) $rowErrors[] = 'Jumlah kolom tidak sesuai header.';
+        if (!$rowErrors && guru_duplicate_nip($pdo, $values['nip'] ?? null)) $rowErrors[] = 'NIP sudah terdaftar di database.';
+        $stageRows[] = ['line'=>$line,'values'=>$values,'valid'=>!$rowErrors,'errors'=>$rowErrors];
+    }
+    fclose($stream);
+    if (!$stageRows) { flash('CSV tidak berisi baris data.', 'danger'); redirect('index.php?module=guru&action=import'); }
+    $seenNips = [];
+    foreach ($stageRows as &$row) {
+        $nip = trim((string)($row['values']['nip'] ?? ''));
+        if ($row['valid'] && $nip !== '' && isset($seenNips[$nip])) { $row['valid'] = false; $row['errors'][] = 'NIP duplikat di dalam file.'; }
+        if ($nip !== '') $seenNips[$nip] = true;
+    }
+    unset($row);
+    $stageToken = bin2hex(random_bytes(16));
+    $_SESSION[$stagingKey][$stageToken] = ['user_id'=>(int)$_SESSION['user_id'],'expires_at'=>time()+1800,'rows'=>$stageRows];
+    redirect('index.php?module=guru&action=import&preview=' . $stageToken);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_module_access('guru', true);
     verify_csrf();
@@ -283,25 +371,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Data guru gagal dihapus. Pastikan tidak ada data yang masih terhubung.', 'warning');
         }
         redirect('index.php?module=guru');
-    } elseif ($postAction === 'import' && $action === 'import') {
+    } elseif ($postAction === '__disabled_direct_import' && $action === 'import') {
         $importReport = ['success' => 0, 'skipped' => 0, 'failed' => 0, 'messages' => []];
         $upload = $_FILES['csv_file'] ?? null;
         $extension = strtolower(pathinfo((string)($upload['name'] ?? ''), PATHINFO_EXTENSION));
-        $requestedSheetName = trim((string)($_POST['worksheet_name'] ?? ''));
         if (!$upload || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            $errors[] = 'Pilih berkas CSV atau XLSX terlebih dahulu.';
+            $errors[] = 'Pilih berkas CSV terlebih dahulu.';
         } elseif (!is_uploaded_file((string)$upload['tmp_name']) || (int)$upload['size'] > 5 * 1024 * 1024) {
             $errors[] = 'Unggahan tidak valid atau ukurannya melebihi batas 5 MB.';
-        } elseif (!in_array($extension, ['csv', 'xls', 'xlsx'], true)) {
-            $errors[] = 'Format berkas harus CSV, XLS, atau XLSX.';
-        } elseif (in_array($extension, ['xls', 'xlsx'], true) && !$spreadsheetAvailable) {
-            $errors[] = 'Impor XLS/XLSX belum dapat digunakan: PhpSpreadsheet dan ekstensi PHP ZIP belum tersedia. Gunakan CSV hasil ekspor Excel untuk sementara.';
+        } elseif ($extension !== 'csv') {
+            $errors[] = 'Format berkas harus CSV. Simpan lembar Excel sebagai CSV UTF-8 terlebih dahulu.';
         } else {
             $rawHeader = null;
             $rawRows = [];
             $tooManyRows = false;
             try {
-                if ($extension === 'csv') {
                     $stream = fopen((string)$upload['tmp_name'], 'rb');
                     if (!$stream) throw new RuntimeException('Berkas CSV tidak dapat dibaca.');
                     $firstLine = (string)fgets($stream);
@@ -320,39 +404,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $rawRows[] = ['line' => $lineNumber, 'values' => $row];
                     }
                     fclose($stream);
-                } else {
-                    $inputFileType = $extension === 'xls' ? 'Xls' : 'Xlsx';
-                    $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($inputFileType);
-                    $sheetNames = $reader->listWorksheetNames((string)$upload['tmp_name']);
-                    if (!$sheetNames) throw new RuntimeException('Buku kerja tidak memiliki worksheet yang dapat dibaca.');
-                    $sheetName = $requestedSheetName !== '' ? $requestedSheetName : (string)$sheetNames[0];
-                    if (!in_array($sheetName, $sheetNames, true)) {
-                        throw new DomainException('Nama sheet tidak ditemukan. Sheet tersedia: ' . implode(', ', $sheetNames));
-                    }
-                    $reader->setLoadSheetsOnly($sheetName);
-                    $reader->setReadDataOnly(true);
-                    if (method_exists($reader, 'setReadEmptyCells')) $reader->setReadEmptyCells(false);
-                    if (method_exists($reader, 'setIgnoreRowsWithNoCells')) $reader->setIgnoreRowsWithNoCells(true);
-                    $workbook = $reader->load((string)$upload['tmp_name']);
-                    $worksheet = $workbook->getSheetByName($sheetName);
-                    if (!$worksheet) throw new RuntimeException('Sheet yang dipilih tidak dapat dimuat.');
-                    foreach ($worksheet->getRowIterator() as $sheetRow) {
-                        $rowValues = $sheetRow->toArray(null, true, false, false);
-                        $nonEmpty = array_map(static fn($value): string => trim((string)$value), $rowValues);
-                        if (!array_filter($nonEmpty, static fn($value): bool => $value !== '')) continue;
-                        if ($rawHeader === null) {
-                            $rawHeader = $rowValues;
-                            continue;
-                        }
-                        if (count($rawRows) >= 1000) {
-                            $tooManyRows = true;
-                            break;
-                        }
-                        $rawRows[] = ['line' => $sheetRow->getRowIndex(), 'values' => $rowValues];
-                    }
-                    $workbook->disconnectWorksheets();
-                    unset($workbook, $worksheet, $reader);
-                }
             } catch (Throwable $e) {
                 $errors[] = $e instanceof DomainException ? $e->getMessage() : 'Berkas tidak dapat dibaca. Pastikan format dan isi file valid.';
                 $rawHeader = null;
@@ -466,6 +517,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit('Halaman Data Guru tidak ditemukan.');
 }
 if ($action === 'import') $pageTitle = 'Impor Data Guru';
+$importPreview = null;
+$importPreviewToken = (string)($_GET['preview'] ?? '');
+if ($action === 'import' && $importPreviewToken !== '') {
+    $candidate = $_SESSION['_guru_import_staging'][$importPreviewToken] ?? null;
+    if (!preg_match('/^[a-f0-9]{32}$/', $importPreviewToken) || !is_array($candidate) || (int)($candidate['user_id'] ?? 0) !== (int)$_SESSION['user_id'] || (int)($candidate['expires_at'] ?? 0) < time()) {
+        unset($_SESSION['_guru_import_staging'][$importPreviewToken]);
+        flash('Pratinjau impor tidak ditemukan atau sudah kedaluwarsa. Unggah file kembali.', 'warning');
+        redirect('index.php?module=guru&action=import');
+    }
+    $importPreview = $candidate['rows'];
+}
+$importValidCount = $importPreview === null ? 0 : count(array_filter($importPreview, static fn(array $row): bool => !empty($row['valid'])));
+$importInvalidCount = $importPreview === null ? 0 : count($importPreview) - $importValidCount;
+$importPreviewPage = max(1, (int)($_GET['preview_page'] ?? 1));
+$importPreviewPages = max(1, (int)ceil(($importPreview === null ? 0 : count($importPreview)) / 50));
+$importPreviewPage = min($importPreviewPage, $importPreviewPages);
+$importPreviewSlice = $importPreview === null ? [] : array_slice($importPreview, ($importPreviewPage - 1) * 50, 50);
 
 $q = trim((string)($_GET['q'] ?? ''));
 $perPage = 25;
@@ -513,7 +581,7 @@ require __DIR__ . '/../includes/header.php';
         <h1 class="h3 mb-1"><?= e($pageTitle) ?></h1>
         <p class="text-secondary mb-0">Data ini menjadi profil induk Guru; akun login dikelola terpisah dan ditautkan oleh Super Admin.</p>
     </div>
-    <?php if ($action === 'list'): ?><div class="d-flex flex-wrap gap-2"><?php if ($hasPublicColumn): ?><a class="btn btn-outline-secondary" href="public/guru.php" target="_blank" rel="noopener">Direktori Publik</a><?php endif; ?><?php if ($canManage): ?><a class="btn btn-outline-primary" href="index.php?module=guru&action=import">Impor <?= $spreadsheetAvailable ? 'CSV / XLS / XLSX' : 'CSV Excel' ?></a><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createGuruModal"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Tambah Guru</button><?php endif; ?></div><?php endif; ?>
+    <?php if ($action === 'list'): ?><div class="d-flex flex-wrap gap-2"><?php if ($hasPublicColumn): ?><a class="btn btn-outline-secondary" href="public/guru.php" target="_blank" rel="noopener">Direktori Publik</a><?php endif; ?><?php if ($canManage): ?><a class="btn btn-outline-primary" href="index.php?module=guru&action=import">Impor CSV Excel</a><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createGuruModal"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Tambah Guru</button><?php endif; ?></div><?php endif; ?>
 </div>
 
 <?php if ($action === 'list' && $canManage): ?>
@@ -619,22 +687,17 @@ require __DIR__ . '/../includes/header.php';
 <?php elseif ($action === 'import'): ?>
     <?php if (!$canManage): ?><div class="alert alert-warning">Akun ini tidak memiliki izin mengimpor data guru.</div><?php else: ?>
         <div class="card p-3 p-md-4 mb-3">
-            <p>Unggah berkas maksimal 5 MB dan 1.000 baris. CSV hasil ekspor Excel selalu didukung. <?= $spreadsheetAvailable ? 'XLS dan XLSX aktif melalui PhpSpreadsheet.' : 'XLS/XLSX tersedia setelah PhpSpreadsheet dan ekstensi PHP ZIP dipasang/diaktifkan.' ?></p>
+            <p>Unggah berkas CSV maksimal 5 MB dan 1.000 baris. Untuk data dari Excel, simpan lembar sebagai CSV UTF-8 terlebih dahulu.</p>
             <p>Header wajib: <code>nama,jenis_kelamin</code> atau <code>Nama,JK</code>. Kolom opsional: <code>nip,telepon,email,alamat,status</code>. NIP ganda dilewati dan data lama tidak ditimpa.</p>
             <p class="d-flex flex-wrap gap-2">
                 <a class="btn btn-outline-primary btn-sm" href="assets/templates/Template_Impor_Guru_SIMS.csv" download>Unduh Template CSV</a>
-                <?php if ($spreadsheetAvailable): ?><a class="btn btn-outline-primary btn-sm" href="assets/templates/Template_Data_Guru_SMPN4_Pirime.xlsx" download>Unduh Template Excel</a><?php endif; ?>
+                <a class="btn btn-outline-primary btn-sm" href="assets/templates/Template_Data_Guru_SMPN4_Pirime.xlsx" download>Unduh Template Excel (simpan sebagai CSV untuk impor)</a>
             </p>
-            <form method="post" enctype="multipart/form-data" action="index.php?module=guru&action=import"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="import">
-                <div class="mb-3"><label class="form-label" for="csv_file">Berkas CSV<?= $spreadsheetAvailable ? ' atau XLS / XLSX' : '' ?></label><input class="form-control" type="file" id="csv_file" name="csv_file" accept=".csv,text/csv<?= $spreadsheetAvailable ? ',.xls,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel' : '' ?>" required></div><?php if ($spreadsheetAvailable): ?><div class="mb-3"><label class="form-label" for="worksheet_name">Nama sheet (opsional)</label><input class="form-control" id="worksheet_name" name="worksheet_name" value="<?= e($_POST['worksheet_name'] ?? '') ?>" placeholder="Kosongkan untuk memakai sheet pertama">
-                        <div class="form-text">Sheet harus sama persis dengan nama di berkas Excel.</div>
-                    </div><?php endif; ?><button class="btn btn-primary">Validasi dan Impor</button> <a class="btn btn-outline-secondary" href="index.php?module=guru">Kembali</a>
+            <form method="post" enctype="multipart/form-data" action="index.php?module=guru&action=import"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="import_upload">
+                <div class="mb-3"><label class="form-label" for="csv_file">Berkas CSV</label><input class="form-control" type="file" id="csv_file" name="csv_file" accept=".csv,text/csv" required><div class="form-text">File dipratinjau terlebih dahulu. Data baru disimpan setelah Anda menekan tombol konfirmasi.</div></div><button class="btn btn-primary">Validasi dan tampilkan pratinjau</button> <a class="btn btn-outline-secondary" href="index.php?module=guru">Kembali</a>
             </form>
         </div>
-        <?php if ($importReport): ?><div class="alert alert-info"><strong>Ringkasan impor:</strong> <?= (int)$importReport['success'] ?> berhasil, <?= (int)$importReport['skipped'] ?> dilewati, <?= (int)$importReport['failed'] ?> gagal.</div><?php if ($importReport['messages']): ?><div class="card p-3">
-                    <h2 class="h6">Rincian baris</h2>
-                    <ul class="mb-0"><?php foreach ($importReport['messages'] as $message): ?><li><?= e($message) ?></li><?php endforeach; ?></ul>
-                </div><?php endif; ?><?php endif; ?>
+        <?php if ($importPreview !== null): ?><div class="card p-3 p-md-4 mb-3"><div class="d-flex flex-wrap gap-2"><span class="badge text-bg-success"><?= $importValidCount ?> baris valid</span><span class="badge text-bg-warning"><?= $importInvalidCount ?> baris perlu diperbaiki atau akan dilewati</span></div><p class="small text-secondary mt-2 mb-0">Pratinjau terikat pada akun Anda dan berlaku 30 menit. Maksimal 50 baris ditampilkan per halaman.</p></div><div class="card p-3"><div class="table-responsive"><table class="table table-sm table-hover align-middle"><thead class="table-light"><tr><th>Baris</th><?php foreach ($fields as $key => $field): ?><th><?= e($field['label']) ?></th><?php endforeach; ?><th>Validasi</th></tr></thead><tbody><?php foreach ($importPreviewSlice as $previewRow): ?><tr class="<?= $previewRow['valid'] ? '' : 'table-warning' ?>"><td><?= (int)$previewRow['line'] ?></td><?php foreach ($fields as $key => $field): ?><td><?= e(guru_display_value($key, $previewRow['values'][$key] ?? null)) ?></td><?php endforeach; ?><td><?= $previewRow['valid'] ? '<span class="badge text-bg-success">Valid</span>' : e(implode(' ', $previewRow['errors'])) ?></td></tr><?php endforeach; ?></tbody></table></div><?php if ($importPreviewPages > 1): ?><nav aria-label="Halaman pratinjau"><ul class="pagination pagination-sm flex-wrap"><?php for ($n=max(1,$importPreviewPage-2);$n<=min($importPreviewPages,$importPreviewPage+2);$n++): ?><li class="page-item<?= $n===$importPreviewPage?' active':'' ?>"><a class="page-link" href="index.php?module=guru&amp;action=import&amp;preview=<?= e($importPreviewToken) ?>&amp;preview_page=<?= $n ?>"><?= $n ?></a></li><?php endfor; ?></ul></nav><?php endif; ?><div class="d-flex flex-wrap gap-2 mt-2"><form method="post" action="index.php?module=guru&amp;action=import" onsubmit="return confirm('Simpan <?= $importValidCount ?> baris valid ke database? Baris tidak valid akan dilewati.');"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="import_confirm"><input type="hidden" name="import_token" value="<?= e($importPreviewToken) ?>"><button class="btn btn-primary" type="submit" <?= $importValidCount ? '' : 'disabled' ?>>Impor <?= $importValidCount ?> baris valid</button></form><form method="post" action="index.php?module=guru&amp;action=import"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="import_cancel"><input type="hidden" name="import_token" value="<?= e($importPreviewToken) ?>"><button class="btn btn-outline-secondary" type="submit">Batalkan pratinjau</button></form></div></div><?php endif; ?>
             <?php endif; ?>
         <?php else: ?>
             <div class="card p-3">
@@ -668,7 +731,7 @@ require __DIR__ . '/../includes/header.php';
                                 </tr><?php else: foreach ($rows as $index => $row): ?><tr>
                                         <td><?= $offset + $index + 1 ?></td><?php if ($hasPhotoColumn): ?><td><?php $rowPhoto = guru_photo_src($row['foto'] ?? null, (int)$row['id']); ?><?php if ($rowPhoto): ?><img class="guru-photo guru-photo-small" src="<?= e($rowPhoto) ?>" alt="Foto <?= e($row['nama'] ?? 'guru') ?>"><?php else: ?><span class="guru-photo guru-photo-small guru-photo-placeholder"><i class="bi bi-person-fill"></i></span><?php endif; ?></td><?php endif; ?><?php foreach ($fields as $key => $field): ?><td><?= e(guru_display_value($key, $row[$key] ?? null)) ?></td><?php endforeach; ?><?php if ($hasPublicColumn): ?><td><span class="badge <?= (int)($row['tampil_publik'] ?? 0) === 1 ? 'text-bg-success' : 'text-bg-secondary' ?>"><?= (int)($row['tampil_publik'] ?? 0) === 1 ? 'Diizinkan' : 'Privat' ?></span></td><?php endif; ?><?php if ($showAccountLink): ?><td><?php if (!empty($row['akun_user_id'])): ?><a class="btn btn-sm <?= (int)$row['akun_aktif'] === 1 ? 'btn-outline-success' : 'btn-outline-secondary' ?>" href="users.php?q=<?= rawurlencode((string)$row['akun_username']) ?>&role=guru"><i class="bi bi-person-lock me-1"></i><?= (int)$row['akun_aktif'] === 1 ? 'Akun aktif' : 'Akun nonaktif' ?></a>
                                                     <div class="small text-secondary mt-1"><?= e($row['akun_username']) ?></div><?php if (($row['status'] ?? 'Aktif') !== 'Aktif' && (int)$row['akun_aktif'] === 1): ?><div class="small text-warning-emphasis mt-1">Profil nonaktif; periksa status akun.</div><?php endif; ?><?php elseif (($row['status'] ?? 'Aktif') === 'Aktif'): ?><a class="btn btn-sm btn-outline-primary" href="users.php?buat=guru&amp;guru_id=<?= (int)$row['id'] ?>#buat-akun"><i class="bi bi-person-plus me-1"></i>Buat akun</a><?php else: ?><span class="small text-secondary">Aktifkan profil sebelum membuat akun</span><?php endif; ?>
-                                            </td><?php endif; ?><td class="no-print text-nowrap"><a class="btn btn-sm btn-outline-secondary" href="index.php?module=guru&action=detail&id=<?= (int)$row['id'] ?>">Detail</a><?php if ($canManage): ?> <a class="btn btn-sm btn-outline-primary" href="index.php?module=guru&action=edit&id=<?= (int)$row['id'] ?>">Edit</a>
+                                            </td><?php endif; ?><td class="no-print text-nowrap"><a class="btn btn-sm btn-outline-secondary" href="index.php?module=guru&action=detail&id=<?= (int)$row['id'] ?>"><i class="bi bi-eye me-1" aria-hidden="true"></i>Lihat</a><?php if ($canManage): ?> <a class="btn btn-sm btn-outline-primary" href="index.php?module=guru&action=edit&id=<?= (int)$row['id'] ?>"><i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit</a>
                                                 <form class="d-inline" method="post" action="index.php?module=guru&action=delete&id=<?= (int)$row['id'] ?>" onsubmit="return confirm('Hapus data guru ini? Data yang masih berelasi tidak dapat dihapus.')"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="_form_action" value="delete"><button class="btn btn-sm btn-outline-danger">Hapus</button></form><?php endif; ?>
                                         </td>
                                     </tr><?php endforeach;

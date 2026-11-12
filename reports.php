@@ -11,14 +11,19 @@ if (in_array(current_role(), ['guru', 'siswa'], true)) {
 $pageTitle = 'Laporan';
 $type = (string)($_GET['type'] ?? 'siswa');
 $allowed = ['siswa', 'guru', 'kelas', 'nilai', 'absensi', 'absensi_guru', 'jadwal', 'materi', 'tugas', 'pengumpulan'];
+$allowed[] = 'staf';
 if (!in_array($type, $allowed, true)) {
     $type = 'siswa';
 }
-$schoolYears = $pdo->query('SELECT id, nama FROM tahun_ajaran ORDER BY nama DESC')->fetchAll(PDO::FETCH_KEY_PAIR);
+if ($type === 'staf') {
+    require_module_access('staf');
+}
+$schoolYears = $type === 'staf' ? [] : $pdo->query('SELECT id, nama FROM tahun_ajaran ORDER BY nama DESC')->fetchAll(PDO::FETCH_KEY_PAIR);
 $filterError = '';
 $yearId = '';
 $semester = (string)($_GET['semester'] ?? '');
 $statusFilter = trim((string)($_GET['status'] ?? ''));
+$positionFilter = trim((string)($_GET['jabatan'] ?? ''));
 $dateFrom = trim((string)($_GET['tanggal_mulai'] ?? ''));
 $dateTo = trim((string)($_GET['tanggal_selesai'] ?? ''));
 
@@ -38,9 +43,12 @@ if ($yearId !== '') {
     $classParams[] = (int)$yearId;
 }
 $classSql .= ' ORDER BY ta.nama DESC,k.tingkat,k.nama_kelas';
-$classStmt = $pdo->prepare($classSql);
-$classStmt->execute($classParams);
-$classes = $classStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+$classes = [];
+if ($type !== 'staf') {
+    $classStmt = $pdo->prepare($classSql);
+    $classStmt->execute($classParams);
+    $classes = $classStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+}
 if ($classId !== '' && (!ctype_digit($classId) || !isset($classes[$classId]))) {
     $filterError = 'Kelas yang dipilih tidak sesuai dengan tahun ajaran.';
     $classId = '';
@@ -63,6 +71,7 @@ if ($dateFrom !== '' && $dateTo !== '' && $dateFrom > $dateTo) {
     $filterError = 'Tanggal mulai tidak boleh melewati tanggal selesai.';
 }
 $queries = [
+    'staf' => ['title' => 'Ringkasan Tenaga Kependidikan', 'sql' => "SELECT jabatan,status,COUNT(*) AS jumlah FROM staff", 'headers' => ['Jabatan', 'Status', 'Jumlah']],
     'siswa' => ['title' => 'Laporan Data Siswa', 'sql' => "SELECT s.nis,s.nisn,s.nama,s.jenis_kelamin,k.nama_kelas,s.tahun_masuk,s.status FROM siswa s LEFT JOIN kelas k ON k.id=s.kelas_id", 'headers' => ['NIS', 'NISN', 'Nama', 'Jenis Kelamin', 'Kelas', 'Tahun Masuk', 'Status']],
     'guru' => ['title' => 'Laporan Data Guru', 'sql' => "SELECT nip,nama,jenis_kelamin,telepon,email,status FROM guru", 'headers' => ['NIP', 'Nama', 'Jenis Kelamin', 'Telepon', 'Email', 'Status']],
     'kelas' => ['title' => 'Laporan Distribusi Siswa per Kelas', 'sql' => "SELECT ta.nama AS tahun_ajaran,k.nama_kelas,CASE k.tingkat WHEN '7' THEN 'VII' WHEN '8' THEN 'VIII' ELSE 'IX' END AS tingkat,COALESCE(g.nama,'Belum ditetapkan') AS wali_kelas,COUNT(CASE WHEN s.status='Aktif' THEN 1 END) AS siswa_aktif,COUNT(CASE WHEN s.status='Aktif' AND s.jenis_kelamin='L' THEN 1 END) AS laki_laki,COUNT(CASE WHEN s.status='Aktif' AND s.jenis_kelamin='P' THEN 1 END) AS perempuan FROM kelas k JOIN tahun_ajaran ta ON ta.id=k.tahun_ajaran_id LEFT JOIN guru g ON g.id=k.wali_guru_id LEFT JOIN siswa s ON s.kelas_id=k.id", 'headers' => ['Tahun Ajaran', 'Kelas', 'Tingkat', 'Wali Kelas', 'Siswa Aktif', 'Laki-laki', 'Perempuan']],
@@ -77,6 +86,24 @@ $queries = [
 $where = [];
 $params = [];
 if ($filterError === '') {
+    if ($type === 'staf') {
+        if ($statusFilter !== '' && !in_array($statusFilter, ['aktif', 'nonaktif', 'pensiun'], true)) {
+            $filterError = 'Status tenaga kependidikan tidak valid.';
+        } elseif ($statusFilter !== '') {
+            $where[] = 'status=?';
+            $params[] = $statusFilter;
+        }
+        if ($positionFilter !== '') {
+            $positionStmt = $pdo->prepare('SELECT 1 FROM staff WHERE jabatan=? LIMIT 1');
+            $positionStmt->execute([$positionFilter]);
+            if ($positionStmt->fetchColumn()) {
+                $where[] = 'jabatan=?';
+                $params[] = $positionFilter;
+            } else {
+                $filterError = 'Jabatan yang dipilih tidak tersedia.';
+            }
+        }
+    }
     if ($yearId !== '' && in_array($type, ['siswa', 'kelas', 'nilai', 'absensi', 'jadwal', 'materi', 'tugas', 'pengumpulan'], true)) {
         $where[] = match ($type) {
             'siswa' => 'k.tahun_ajaran_id = ?',
@@ -151,7 +178,8 @@ if ($filterError !== '') {
             $sql = '';
         }
     }
-    if ($sql !== '') $sql .= match ($type) {
+    if ($type === 'staf' && $sql !== '') $sql .= ' GROUP BY jabatan,status ORDER BY jabatan,status';
+    elseif ($sql !== '') $sql .= match ($type) {
         'siswa' => ' ORDER BY k.nama_kelas,s.nama',
         'kelas' => ' GROUP BY k.id,ta.nama,k.nama_kelas,k.tingkat,g.nama ORDER BY ta.nama DESC,k.tingkat,k.nama_kelas',
         'guru' => ' ORDER BY nama',
@@ -200,13 +228,20 @@ if ($classId !== '') $reportPeriod[] = 'Kelas: ' . ($classes[$classId] ?? '');
 if ($semester !== '') $reportPeriod[] = 'Semester: ' . ($semester === '1' ? 'Ganjil' : 'Genap');
 if ($dateFrom !== '' || $dateTo !== '') $reportPeriod[] = 'Tanggal: ' . ($dateFrom ?: 'awal') . ' s.d. ' . ($dateTo ?: 'sekarang');
 if ($statusFilter !== '') $reportPeriod[] = 'Status: ' . $statusFilter;
+if ($type === 'staf' && $positionFilter !== '') $reportPeriod[] = 'Jabatan: ' . $positionFilter;
 if (($_GET['export'] ?? '') === 'csv') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="sims-' . $type . '-' . date('Ymd-His') . '.csv"');
     $output = fopen('php://output', 'w');
     fwrite($output, "\xEF\xBB\xBF");
     fputcsv($output, $queries[$type]['headers']);
-    foreach ($data as $row) fputcsv($output, array_values($row));
+    foreach ($data as $row) {
+        $cells = array_map(static function (mixed $value): string {
+            $cell = (string)($value ?? '');
+            return preg_match('/^[\s]*[=+@-]/u', $cell) ? "'" . $cell : $cell;
+        }, array_values($row));
+        fputcsv($output, $cells);
+    }
     fclose($output);
     exit;
 }
@@ -220,10 +255,18 @@ require __DIR__ . '/includes/header.php';
     <div class="d-flex gap-2 no-print"><a class="btn btn-outline-primary" href="reports.php?<?= e(http_build_query(array_merge($_GET, ['export' => 'csv']))) ?>">Ekspor CSV</a><button onclick="window.print()" class="btn btn-primary">Cetak / Simpan PDF</button></div>
 </div>
 <div class="card p-3">
-    <div class="d-flex flex-wrap gap-2 mb-3 no-print"><?php foreach (['siswa' => 'Data Siswa', 'guru' => 'Data Guru', 'kelas' => 'Distribusi Kelas', 'nilai' => 'Nilai Siswa', 'absensi' => 'Absensi Siswa', 'absensi_guru' => 'Kehadiran Guru', 'jadwal' => 'Jadwal Kelas', 'materi' => 'Materi', 'tugas' => 'Tugas', 'pengumpulan' => 'Pengumpulan'] as $k => $label): ?><a class="btn btn-sm <?= $type === $k ? 'btn-primary' : 'btn-outline-primary' ?>" href="reports.php?type=<?= e($k) ?>"><?= e($label) ?></a><?php endforeach; ?></div>
-    <?php if (in_array($type, ['siswa', 'kelas', 'nilai', 'jadwal', 'materi', 'tugas', 'pengumpulan'], true) || in_array($type, ['absensi', 'absensi_guru'], true)): ?>
+    <div class="d-flex flex-wrap gap-2 mb-3 no-print"><?php foreach (['siswa' => 'Data Siswa', 'guru' => 'Data Guru', 'staf' => 'Tenaga Kependidikan', 'kelas' => 'Distribusi Kelas', 'nilai' => 'Nilai Siswa', 'absensi' => 'Absensi Siswa', 'absensi_guru' => 'Kehadiran Guru', 'jadwal' => 'Jadwal Kelas', 'materi' => 'Materi', 'tugas' => 'Tugas', 'pengumpulan' => 'Pengumpulan'] as $k => $label): ?><?php if ($k !== 'staf' || can_view_module('staf')): ?><a class="btn btn-sm <?= $type === $k ? 'btn-primary' : 'btn-outline-primary' ?>" href="reports.php?type=<?= e($k) ?>"><?= e($label) ?></a><?php endif; ?><?php endforeach; ?></div>
+    <?php if (in_array($type, ['siswa', 'kelas', 'nilai', 'jadwal', 'materi', 'tugas', 'pengumpulan'], true) || in_array($type, ['absensi', 'absensi_guru', 'staf'], true)): ?>
         <form method="get" class="row g-2 align-items-end mb-4 no-print">
             <input type="hidden" name="type" value="<?= e($type) ?>">
+            <?php if ($type === 'staf'): $reportPositions = $pdo->query("SELECT DISTINCT jabatan FROM staff WHERE jabatan<>'' ORDER BY jabatan")->fetchAll(PDO::FETCH_COLUMN); ?>
+                <div class="col-12 col-sm-6 col-lg-4"><label class="form-label" for="jabatan">Jabatan</label><select class="form-select" id="jabatan" name="jabatan">
+                        <option value="">Semua jabatan</option><?php foreach ($reportPositions as $position): ?><option value="<?= e($position) ?>" <?= $positionFilter === $position ? 'selected' : '' ?>><?= e($position) ?></option><?php endforeach; ?>
+                    </select></div>
+                <div class="col-12 col-sm-6 col-lg-3"><label class="form-label" for="status">Status</label><select class="form-select" id="status" name="status">
+                        <option value="">Semua status</option><?php foreach (['aktif' => 'Aktif', 'nonaktif' => 'Nonaktif', 'pensiun' => 'Pensiun'] as $value => $label): ?><option value="<?= e($value) ?>" <?= $statusFilter === $value ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
+                    </select></div>
+            <?php endif; ?>
             <?php if (in_array($type, ['siswa', 'kelas', 'nilai', 'jadwal', 'absensi', 'materi', 'tugas', 'pengumpulan'], true)): ?>
                 <div class="col-sm-6 col-lg-3"><label class="form-label" for="tahun_ajaran_id">Tahun Ajaran</label><select class="form-select" id="tahun_ajaran_id" name="tahun_ajaran_id">
                         <option value="">Semua tahun</option><?php foreach ($schoolYears as $id => $name): ?><option value="<?= e($id) ?>" <?= (string)$yearId === (string)$id ? ' selected' : '' ?>><?= e($name) ?></option><?php endforeach; ?>

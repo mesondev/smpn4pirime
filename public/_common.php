@@ -55,6 +55,54 @@ function portal_profile(PDO $pdo): array
 {
     return array_replace(['nama' => 'SMP Negeri 4 Pirime', 'npsn' => '60303637', 'alamat' => '', 'alamat_jalan' => 'Jln. Milimbo-Tiom', 'kampung' => 'Umbanume', 'distrik' => 'Pirime', 'kabupaten' => 'Lanny Jaya', 'provinsi' => 'Papua Pegunungan', 'kode_pos' => '', 'status_sekolah' => 'Negeri', 'jenjang' => 'SMP', 'naungan' => 'Pemerintah Daerah', 'akreditasi' => 'C', 'akreditasi_status' => 'perlu_verifikasi', 'visi_status' => 'rancangan', 'misi_status' => 'rancangan', 'tujuan_status' => 'rancangan', 'sejarah_status' => 'perlu_verifikasi', 'tujuan' => '', 'telepon' => '', 'email' => '', 'sejarah' => '', 'visi' => '', 'misi' => '', 'sambutan' => '', 'jam_layanan' => '', 'peta_url' => ''], portal_row($pdo, 'SELECT * FROM profil_sekolah WHERE id=1 LIMIT 1'));
 }
+
+function portal_public_visitor_stats(PDO $pdo): array
+{
+    $emptyStats = ['today' => null, 'total' => null];
+    if (PHP_SAPI === 'cli' || session_status() !== PHP_SESSION_ACTIVE) return $emptyStats;
+    if (strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) !== 'GET') return $emptyStats;
+    $userAgent = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if ($userAgent !== '' && preg_match('/bot|crawler|spider|slurp|preview|facebookexternalhit|whatsapp/i', $userAgent)) return $emptyStats;
+    if (!portal_schema_ready($pdo, 'portal_pengunjung_harian', ['tanggal', 'pengunjung'])) return $emptyStats;
+
+    $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Jayapura')))->format('Y-m-d');
+    $sessionKey = 'portal_visitor_counted_' . $today;
+    try {
+        if (empty($_SESSION[$sessionKey])) {
+            $record = $pdo->prepare('INSERT INTO portal_pengunjung_harian (tanggal,pengunjung) VALUES (?,1) ON DUPLICATE KEY UPDATE pengunjung=pengunjung+1');
+            $record->execute([$today]);
+            $_SESSION[$sessionKey] = true;
+        }
+        $counts = $pdo->prepare('SELECT COALESCE(SUM(pengunjung),0) total, COALESCE(SUM(CASE WHEN tanggal=? THEN pengunjung ELSE 0 END),0) today FROM portal_pengunjung_harian');
+        $counts->execute([$today]);
+        $row = $counts->fetch() ?: [];
+        return ['today' => (int)($row['today'] ?? 0), 'total' => (int)($row['total'] ?? 0)];
+    } catch (PDOException $exception) {
+        portal_log_query_failure('count public visitors', $exception);
+        return $emptyStats;
+    }
+}
+
+function portal_school_address(array $profile): string
+{
+    $parts = [];
+    $append = static function (string $label, mixed $value) use (&$parts): void {
+        $value = trim((string)$value);
+        if ($value === '' || preg_match('/^(?:tidak diisi|belum (?:diatur|tersedia|tercatat)|n\/?a|-)$/iu', $value)) return;
+        $parts[] = $label === '' ? $value : $label . ' ' . $value;
+    };
+    $append('', $profile['alamat_jalan'] ?? '');
+    $append('Kampung', $profile['kampung'] ?? '');
+    $append('Distrik', $profile['distrik'] ?? '');
+    $append('Kabupaten', $profile['kabupaten'] ?? '');
+    $append('Provinsi', $profile['provinsi'] ?? '');
+    $append('', $profile['kode_pos'] ?? '');
+    if ($parts) return implode(', ', $parts);
+
+    $legacyAddress = trim((string)($profile['alamat'] ?? ''));
+    if ($legacyAddress === '' || preg_match('/\b(?:tidak diisi|belum (?:diatur|tersedia|tercatat))\b/iu', $legacyAddress)) return '';
+    return $legacyAddress;
+}
 function portal_phone_uri(?string $phone): string
 {
     $normalized = preg_replace('/[^0-9+]/', '', trim((string)$phone)) ?? '';
@@ -92,6 +140,18 @@ function portal_public_stats(PDO $pdo): array
         $stats['pengumuman'] = $count("SELECT COUNT(*) FROM pengumuman WHERE status='Terbit' AND (mulai_tayang IS NULL OR mulai_tayang<=CURDATE()) AND (selesai_tayang IS NULL OR selesai_tayang>=CURDATE())");
     }
     return $stats;
+}
+function portal_public_school_leaders(PDO $pdo): array
+{
+    if (!portal_schema_ready($pdo, 'portal_struktur_sekolah', ['id', 'nama', 'jabatan', 'foto_url', 'status', 'urutan'])) return [];
+    return portal_rows(
+        $pdo,
+        "SELECT id,nama,jabatan,foto_url FROM portal_struktur_sekolah
+         WHERE status='Terbit'
+           AND (LOWER(jabatan) LIKE '%kepala sekolah%' OR LOWER(jabatan) LIKE '%pimpinan sekolah%')
+           AND LOWER(jabatan) NOT LIKE '%wakil%'
+         ORDER BY urutan,nama LIMIT 1"
+    );
 }
 // Build accessible breadcrumbs and add the parent listing on article-detail pages.
 function portal_breadcrumb_markup(string $activePage, string $pageTitle): string

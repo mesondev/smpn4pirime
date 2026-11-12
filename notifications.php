@@ -68,17 +68,50 @@ $archiveSelect = $hasArchive ? 'archived_at' : 'NULL AS archived_at';
 $list = $pdo->prepare("SELECT id,judul,pesan,tautan,dibaca,$archiveSelect,created_at FROM notifikasi WHERE $whereSql ORDER BY created_at DESC,id DESC LIMIT $perPage OFFSET $offset");
 $list->execute($params);
 $notifications = $list->fetchAll();
+$recentActivities = [];
+if (current_role() === 'admin' && can_view_module('log_aktivitas')) {
+    try {
+        $recentActivities = $pdo->query('SELECT l.aksi,l.entitas,l.detail,l.created_at,u.nama_lengkap FROM log_aktivitas l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.created_at DESC,l.id DESC LIMIT 10')->fetchAll();
+    } catch (PDOException $ignored) {
+        $recentActivities = [];
+    }
+}
 $pageTitle = 'Notifikasi';
 require __DIR__ . '/includes/header.php';
 ?>
 <div class="dashboard-heading">
     <div>
         <h1>Notifikasi</h1>
-        <p>Pesan dan pembaruan yang ditujukan kepada akun Anda.</p>
+        <p><?= current_role() === 'admin' ? 'Notifikasi akun dan aktivitas sistem terbaru.' : 'Pesan dan pembaruan yang ditujukan kepada akun Anda.' ?></p>
     </div>
 </div>
 <?php if ($error !== ''): ?><div class="alert alert-warning" role="alert"><?= e($error) ?></div><?php endif; ?>
 <?php if ($archiveUnavailable): ?><div class="alert alert-info" role="status">Fitur arsip belum tersedia pada database ini. Terapkan migrasi notifikasi untuk mengaktifkannya.</div><?php endif; ?>
+<?php if (current_role() === 'admin' && can_view_module('log_aktivitas')): ?>
+    <section class="card p-3 p-md-4 mb-4" aria-labelledby="recentActivitiesTitle">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <h2 class="h5 mb-1" id="recentActivitiesTitle">Aktivitas Terbaru</h2>
+                <p class="small text-secondary mb-0">Sepuluh tindakan terakhir yang tercatat pada sistem.</p>
+            </div>
+            <a class="btn btn-sm btn-outline-primary" href="activity.php">Buka log aktivitas lengkap</a>
+        </div>
+        <?php if (!$recentActivities): ?><div class="empty-state">Belum ada aktivitas sistem yang tercatat.</div>
+        <?php else: ?><div class="notification-inbox-list">
+                <?php foreach ($recentActivities as $activity): ?>
+                    <article class="notification-inbox-item">
+                        <div class="notification-inbox-copy">
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <h3 class="h6 mb-0"><?= e($activity['aksi']) ?></h3><span class="badge text-bg-secondary"><?= e($activity['entitas'] ?: 'Sistem') ?></span>
+                            </div>
+                            <?php if (trim((string)($activity['detail'] ?? '')) !== ''): ?><p><?= nl2br(e($activity['detail'])) ?></p><?php endif; ?>
+                            <small><?= e($activity['nama_lengkap'] ?: 'Akun dihapus') ?> · <?= e(date('d M Y · H:i', strtotime($activity['created_at']))) ?></small>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            </div><?php endif; ?>
+    </section>
+<?php endif; ?>
 <div class="card p-3 p-md-4">
     <div class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Filter status notifikasi">
         <?php foreach (['all' => 'Semua', 'unread' => 'Belum dibaca', 'read' => 'Sudah dibaca', 'archived' => 'Diarsipkan'] as $key => $label): if ($key === 'archived' && !$hasArchive) continue; ?><a class="btn btn-sm <?= $status === $key ? 'btn-primary' : 'btn-outline-primary' ?>" href="index.php?module=notifikasi&status=<?= e($key) ?>"><?= e($label) ?></a><?php endforeach; ?>

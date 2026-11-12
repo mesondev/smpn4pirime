@@ -43,7 +43,9 @@ require __DIR__ . '/_header.php'; ?>
                 <div class="academic-metrics">
                     <div><strong><?= $academicStats['siswa'] === null ? '—' : number_format($academicStats['siswa'], 0, ',', '.') ?></strong><span>Siswa aktif</span></div>
                     <div><strong><?= $activeClassCount === null ? '—' : number_format($activeClassCount, 0, ',', '.') ?></strong><span>Rombel aktif</span></div>
+                    <div><strong><?= $academicStats['guru'] === null ? '—' : number_format($academicStats['guru'], 0, ',', '.') ?></strong><span>Guru aktif</span></div>
                 </div>
+                <small class="academic-data-source">Sumber: jumlah data aktif pada database SIMS, dihitung saat halaman dibuka. Tidak memuat identitas individu.</small>
             </article>
             <article class="academic-card" id="rombongan-belajar">
                 <span class="academic-card-icon"><i class="bi bi-door-open-fill" aria-hidden="true"></i></span><span class="kicker">Rombongan belajar</span>

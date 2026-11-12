@@ -23,8 +23,9 @@ $rejectionReady = str_contains((string)$rejectionSchemaCheck->fetchColumn(), 'di
 function biodata_required_fields(string $role): array
 {
     return match ($role) {
-        'siswa' => ['telepon', 'whatsapp', 'nama_kontak_darurat', 'telepon_kontak_darurat'],
+        'siswa' => ['telepon', 'alamat', 'tanggal_lahir', 'provinsi', 'kabupaten', 'distrik', 'kampung', 'nama_kontak_darurat', 'telepon_kontak_darurat', 'asal_sekolah'],
         'guru' => ['telepon', 'whatsapp', 'tempat_lahir', 'tanggal_lahir', 'pendidikan'],
+        'admin' => ['telepon', 'email_pribadi'],
         default => ['telepon', 'whatsapp', 'tempat_lahir', 'tanggal_lahir', 'alamat'],
     };
 }
@@ -188,6 +189,10 @@ if (!$schemaReady) {
 }
 
 $targetStmt = $pdo->prepare('SELECT u.id,u.username,u.nama_lengkap,u.role,u.guru_id,u.siswa_id,u.foto_path,u.aktif,u.created_at,u.last_login_at,g.nama AS nama_guru,g.nip,g.email AS email_guru,g.jenis_kelamin AS guru_jenis_kelamin,g.status AS guru_status,g.alamat AS guru_alamat,s.nama AS nama_siswa,s.nis,s.nisn,s.jenis_kelamin AS siswa_jenis_kelamin,s.tahun_masuk,s.status AS siswa_status,s.tanggal_lahir AS siswa_tanggal_lahir,s.alamat AS siswa_alamat,k.nama_kelas,ta.nama AS tahun_ajaran,wali.nama AS wali_kelas FROM users u LEFT JOIN guru g ON g.id=u.guru_id LEFT JOIN siswa s ON s.id=u.siswa_id LEFT JOIN kelas k ON k.id=s.kelas_id LEFT JOIN tahun_ajaran ta ON ta.id=k.tahun_ajaran_id LEFT JOIN guru wali ON wali.id=k.wali_guru_id WHERE u.id=? AND u.aktif=1');
+$previewInactive = $isAdmin && (string)($_GET['preview'] ?? '') === '1';
+if ($previewInactive) {
+    $targetStmt = $pdo->prepare('SELECT u.id,u.username,u.nama_lengkap,u.role,u.guru_id,u.siswa_id,u.foto_path,u.aktif,u.created_at,u.last_login_at,g.nama AS nama_guru,g.nip,g.email AS email_guru,g.jenis_kelamin AS guru_jenis_kelamin,g.status AS guru_status,g.alamat AS guru_alamat,s.nama AS nama_siswa,s.nis,s.nisn,s.jenis_kelamin AS siswa_jenis_kelamin,s.tahun_masuk,s.status AS siswa_status,s.tanggal_lahir AS siswa_tanggal_lahir,s.alamat AS siswa_alamat,k.nama_kelas,ta.nama AS tahun_ajaran,wali.nama AS wali_kelas FROM users u LEFT JOIN guru g ON u.guru_id=g.id LEFT JOIN siswa s ON u.siswa_id=s.id LEFT JOIN kelas k ON k.id=s.kelas_id LEFT JOIN tahun_ajaran ta ON ta.id=k.tahun_ajaran_id LEFT JOIN guru wali ON wali.id=k.wali_guru_id WHERE u.id=?');
+}
 $targetStmt->execute([$targetId]);
 $target = $targetStmt->fetch();
 if (!$target || ($targetId !== $userId && (!$isReviewer || (!$isAdmin && !in_array($target['role'], ['kepala_sekolah', 'guru', 'siswa'], true))))) {
@@ -224,9 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($isReviewer && $targetId !== $userId && ($isAdmin || in_array($targetRole, ['kepala_sekolah', 'guru', 'siswa'], true)) && $action === 'review') {
         $decision = (string)($_POST['decision'] ?? '');
         $note = trim((string)($_POST['catatan_verifikasi'] ?? ''));
-        if (!$auditReady) {
-            $error = 'Pemeriksaan belum dapat disimpan karena tabel riwayat belum tersedia. Jalankan migrasi database setelah membuat backup.';
-        } elseif (!in_array($decision, ['terverifikasi', 'perlu_perbaikan', 'ditolak'], true) || ($decision === 'ditolak' && !$rejectionReady)) {
+        if (!in_array($decision, ['terverifikasi', 'perlu_perbaikan', 'ditolak'], true) || ($decision === 'ditolak' && !$rejectionReady)) {
             $error = 'Pilihan pemeriksaan tidak valid.';
         } elseif (in_array($decision, ['perlu_perbaikan', 'ditolak'], true) && $note === '') {
             $error = 'Alasan wajib diisi untuk meminta perbaikan atau menolak pengajuan.';
@@ -263,10 +266,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             [$newPhoto, $photoError] = store_user_photo($_FILES['foto']);
             if ($photoError) $error = $photoError;
         }
-        $fields = ['telepon', 'whatsapp', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'pendidikan'];
+        $fields = $targetRole === 'admin'
+            ? ['telepon', 'email_pribadi']
+            : ['telepon', 'whatsapp', 'tempat_lahir', 'tanggal_lahir', 'alamat', 'pendidikan'];
         if ($targetRole === 'siswa') $fields = array_merge($fields, ['nama_kontak_darurat', 'telepon_kontak_darurat', 'email', 'agama', 'kewarganegaraan', 'anak_ke', 'jumlah_saudara', 'bahasa_sehari_hari', 'provinsi', 'kabupaten', 'kecamatan', 'distrik', 'kampung', 'rt_rw', 'kode_pos', 'jarak_rumah', 'transportasi', 'nama_ayah', 'nik_ayah', 'tempat_lahir_ayah', 'tanggal_lahir_ayah', 'pendidikan_ayah', 'pekerjaan_ayah', 'penghasilan_ayah', 'telepon_ayah', 'status_ayah', 'nama_ibu', 'nik_ibu', 'tempat_lahir_ibu', 'tanggal_lahir_ibu', 'pendidikan_ibu', 'pekerjaan_ibu', 'penghasilan_ibu', 'telepon_ibu', 'status_ibu', 'nama_wali', 'hubungan_wali', 'nik_wali', 'pendidikan_wali', 'pekerjaan_wali', 'telepon_wali', 'alamat_wali', 'asal_sekolah', 'npsn_sekolah_asal', 'nomor_ijazah_sd', 'nomor_skhun', 'tahun_lulus_sd', 'tanggal_masuk_smp', 'semester', 'golongan_darah', 'tinggi_badan', 'berat_badan', 'riwayat_alergi', 'kebutuhan_khusus', 'catatan_kesehatan', 'hobi', 'cita_cita', 'prestasi_akademik', 'prestasi_nonakademik', 'ekstrakurikuler', 'organisasi']);
         if ($targetRole === 'guru') $fields = array_merge($fields, ['nuptk', 'gelar_depan', 'gelar_belakang', 'agama_guru', 'status_perkawinan', 'kewarganegaraan_guru', 'nik_guru', 'nomor_kk_guru', 'email_pribadi', 'provinsi_guru', 'kabupaten_guru', 'kecamatan_guru', 'distrik_guru', 'kampung_guru', 'rt_rw_guru', 'kode_pos_guru', 'perguruan_tinggi', 'fakultas', 'program_studi', 'gelar_akademik', 'tahun_masuk_kuliah', 'tahun_lulus_kuliah', 'nomor_ijazah', 'bidang_keahlian', 'sertifikasi_pendidik', 'nomor_sertifikat_pendidik', 'status_kepegawaian', 'jenis_guru', 'jabatan_guru', 'pangkat_golongan', 'tmt', 'tanggal_mulai_bertugas', 'masa_kerja', 'nomor_sk_pengangkatan', 'tanggal_sk_pengangkatan', 'instansi_induk', 'jabatan_tambahan']);
         if ($targetRole === 'kepala_sekolah') $fields = array_merge($fields, ['nip_kepala', 'nuptk', 'gelar_depan', 'gelar_belakang', 'agama_guru', 'kewarganegaraan_guru', 'nik_guru', 'status_perkawinan', 'email_dinas_kepsek', 'email_pribadi', 'provinsi_guru', 'kabupaten_guru', 'kecamatan_guru', 'distrik_guru', 'kampung_guru', 'rt_rw_guru', 'kode_pos_guru', 'pendidikan_pelatihan', 'perguruan_tinggi', 'fakultas', 'program_studi', 'gelar_akademik', 'tahun_masuk_kuliah', 'tahun_lulus_kuliah', 'nomor_ijazah', 'status_kepegawaian', 'jenis_guru', 'pangkat_golongan', 'jabatan_guru', 'tmt', 'tanggal_mulai_bertugas', 'masa_kerja', 'nomor_sk_pengangkatan', 'tanggal_sk_pengangkatan', 'instansi_induk', 'jabatan_saat_ini', 'sk_kepala_sekolah', 'tanggal_sk_kepala', 'tanggal_mulai_menjabat', 'periode_jabatan', 'status_jabatan', 'jenjang_pendidikan', 'sertifikasi_pendidik', 'nomor_sertifikat_pendidik', 'bidang_sertifikasi', 'nrg', 'sertifikat_kompetensi_kepsek', 'pelatihan_kepemimpinan', 'pelatihan_manajemen_sekolah', 'pelatihan_kurikulum', 'pengembangan_keprofesian', 'jabatan_sebelumnya', 'instansi_sebelumnya', 'tahun_mulai_jabatan', 'tahun_selesai_jabatan', 'nomor_sk_jabatan', 'keterangan_jabatan']);
+        if ($targetRole === 'operator') $fields = array_merge($fields, ['email_pribadi']);
         $documentFields = $targetRole === 'siswa' ? ['dokumen_akta_path', 'dokumen_kk_path', 'dokumen_identitas_ortu_path', 'dokumen_ijazah_sd_path', 'dokumen_kip_path', 'dokumen_pendukung_path'] : [];
         foreach ($documentFields as $documentField) {
             if ($error !== '' || !isset($_FILES[$documentField]) || (int)($_FILES[$documentField]['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;

@@ -174,6 +174,6 @@ Audit ini memberi cakupan menyeluruh atas berkas publik yang tersedia, tetapi ti
 - Menambahkan metadata Open Graph dan deskripsi berbeda per halaman. Host lokal (`localhost`, `.test`) serta halaman pencarian, cek pendaftaran, dan 404 diberi `noindex`.
 - Pengelolaan PPDB berada pada **Layanan Publik → Pengelolaan PPDB**, dengan periode, pencarian/filter pendaftar, catatan untuk pendaftar, dan riwayat status. Perubahannya memakai migrasi aditif serta akses Super Admin.
 - Pemeriksaan koneksi proyek menunjukkan `sims_db` pada server MySQL 8.4.3 di instalasi Laragon; seluruh tabel portal yang dipakai form baru telah diperiksa keberadaan kolomnya.
-- `composer test` lulus 14 tes, termasuk sintaks 78 berkas PHP, 2 JavaScript, 10 CSS, pemeriksaan rute publik/terproteksi dan ledger migrasi.
+- `php tests/run.php` lulus 14 tes, termasuk sintaks 78 berkas PHP, 2 JavaScript, 10 CSS, pemeriksaan rute publik/terproteksi dan ledger migrasi.
 
 Belum dilakukan pada tindak lanjut ini: tinjauan resmi nama/alamat/kontak/foto oleh sekolah; pengisian konten yang belum disahkan; pengukuran performa halaman pada perangkat nyata; pengujian browser interaktif dengan akun Super Admin; sitemap/canonical berbasis domain produksi; serta backup dan pemulihan database. Domain resmi perlu disediakan sebelum metadata URL kanonis dan sitemap diaktifkan.

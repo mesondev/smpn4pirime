@@ -1,43 +1,307 @@
 <?php
 $roleSections = match ($targetRole) {
     'siswa' => [
-        'Identitas Pribadi' => ['email', 'tempat_lahir', 'tanggal_lahir', 'agama', 'kewarganegaraan', 'anak_ke', 'jumlah_saudara', 'bahasa_sehari_hari'],
-        'Alamat Siswa' => ['alamat', 'provinsi', 'kabupaten', 'kecamatan', 'distrik', 'kampung', 'rt_rw', 'kode_pos', 'jarak_rumah', 'transportasi'],
-        'Data Ayah' => ['nama_ayah', 'nik_ayah', 'tempat_lahir_ayah', 'tanggal_lahir_ayah', 'pendidikan_ayah', 'pekerjaan_ayah', 'penghasilan_ayah', 'telepon_ayah', 'status_ayah'],
-        'Data Ibu' => ['nama_ibu', 'nik_ibu', 'tempat_lahir_ibu', 'tanggal_lahir_ibu', 'pendidikan_ibu', 'pekerjaan_ibu', 'penghasilan_ibu', 'telepon_ibu', 'status_ibu'],
-        'Data Wali' => ['nama_wali', 'hubungan_wali', 'nik_wali', 'pendidikan_wali', 'pekerjaan_wali', 'telepon_wali', 'alamat_wali', 'nama_kontak_darurat', 'telepon_kontak_darurat'],
-        'Riwayat Pendidikan' => ['asal_sekolah', 'npsn_sekolah_asal', 'nomor_ijazah_sd', 'nomor_skhun', 'tahun_lulus_sd', 'tanggal_masuk_smp', 'semester'],
-        'Data Kesehatan (opsional)' => ['golongan_darah', 'tinggi_badan', 'berat_badan', 'riwayat_alergi', 'kebutuhan_khusus', 'catatan_kesehatan'],
-        'Data Tambahan' => ['hobi', 'cita_cita', 'prestasi_akademik', 'prestasi_nonakademik', 'ekstrakurikuler', 'organisasi'],
-        'Dokumen Pendukung' => ['dokumen_akta_path', 'dokumen_kk_path', 'dokumen_identitas_ortu_path', 'dokumen_ijazah_sd_path', 'dokumen_kip_path', 'dokumen_pendukung_path'],
+        'Identitas Pribadi' => [
+            'nama_siswa',
+            'nis',
+            'telepon',
+            'whatsapp',
+            'email',
+            'tempat_lahir',
+            'tanggal_lahir',
+            'agama',
+            'kewarganegaraan',
+            // 'anak_ke',
+            // 'jumlah_saudara',
+            // 'bahasa_sehari_hari'
+        ],
+
+        'Alamat Siswa' => [
+            'alamat',
+            'provinsi',
+            'kabupaten',
+            'kecamatan',
+            'distrik',
+            'kampung',
+            // 'rt_rw',
+            // 'kode_pos',
+            // 'jarak_rumah',
+            // 'transportasi'
+        ],
+
+        'Data Ayah' => [
+            'nama_ayah',
+            // 'nik_ayah',
+            'tempat_lahir_ayah',
+            'tanggal_lahir_ayah',
+            'pendidikan_ayah',
+            'pekerjaan_ayah',
+            'penghasilan_ayah',
+            'telepon_ayah',
+            'status_ayah'
+        ],
+        'Data Ibu' => [
+            'nama_ibu',
+            // 'nik_ibu',
+            'tempat_lahir_ibu',
+            'tanggal_lahir_ibu',
+            'pendidikan_ibu',
+            'pekerjaan_ibu',
+            'penghasilan_ibu',
+            'telepon_ibu',
+            'status_ibu'
+            // ],
+            // 'Data Wali' => [
+            //     'nama_wali',
+            //     'hubungan_wali',
+            //     'nik_wali',
+            //     'pendidikan_wali',
+            //     'pekerjaan_wali',
+            //     'telepon_wali',
+            //     'alamat_wali',
+            //     'nama_kontak_darurat',
+            //     'telepon_kontak_darurat'
+        ],
+        'Kontak & Darurat' => [
+            'nama_kontak_darurat',
+            'telepon_kontak_darurat',
+        ],
+        'Riwayat Pendidikan' => [
+            'asal_sekolah',
+            'npsn_sekolah_asal',
+            // 'nomor_ijazah_sd',
+            // 'nomor_skhun',
+            'tahun_lulus_sd',
+            'tanggal_masuk_smp',
+            'kelas'
+        ],
+
+        'Data Kesehatan (opsional)' => [
+            'golongan_darah',
+            'tinggi_badan',
+            'berat_badan',
+            // 'riwayat_alergi',
+            // 'kebutuhan_khusus',
+            // 'catatan_kesehatan',
+        ],
+
+        // 'Data Tambahan' => [
+        //     'hobi',
+        //     'cita_cita',
+        //      'prestasi_akademik',
+        //      'prestasi_nonakademik',
+        //      'ekstrakurikuler',
+        //      'organisasi'],
+
+        // 'Dokumen Pendukung' => [
+        //     'dokumen_akta_path',
+        //     'dokumen_kk_path',
+        //     'dokumen_identitas_ortu_path',
+        //     'dokumen_ijazah_sd_path',
+        //     'dokumen_kip_path',
+        //     'dokumen_pendukung_path'],
     ],
     'guru' => [
-        'Identitas Pribadi' => ['tempat_lahir', 'tanggal_lahir', 'nuptk', 'gelar_depan', 'gelar_belakang', 'agama_guru', 'status_perkawinan', 'kewarganegaraan_guru', 'nik_guru', 'nomor_kk_guru'],
-        'Kontak & Alamat' => ['telepon', 'whatsapp', 'email_pribadi', 'alamat', 'provinsi_guru', 'kabupaten_guru', 'kecamatan_guru', 'distrik_guru', 'kampung_guru', 'rt_rw_guru', 'kode_pos_guru'],
-        'Pendidikan' => ['pendidikan', 'perguruan_tinggi', 'fakultas', 'program_studi', 'gelar_akademik', 'tahun_masuk_kuliah', 'tahun_lulus_kuliah', 'nomor_ijazah', 'bidang_keahlian', 'sertifikasi_pendidik', 'nomor_sertifikat_pendidik'],
-        'Data Kepegawaian' => ['status_kepegawaian', 'jenis_guru', 'jabatan_guru', 'pangkat_golongan', 'tmt', 'tanggal_mulai_bertugas', 'masa_kerja', 'nomor_sk_pengangkatan', 'tanggal_sk_pengangkatan', 'instansi_induk'],
-        'Penugasan di Sekolah' => ['jabatan_tambahan', 'semester'],
+        'Identitas Pribadi' => [
+            'nama_guru',
+            'nip',
+            'tempat_lahir',
+            'tanggal_lahir',
+            'nuptk',
+            // 'gelar_depan',
+            // 'gelar_belakang',
+            'agama_guru',
+            'status_perkawinan',
+            'kewarganegaraan_guru',
+            'nik_guru',
+            // 'nomor_kk_guru'
+        ],
+
+        'Kontak & Alamat' => [
+            'telepon',
+            'whatsapp',
+            'email_pribadi',
+            'alamat',
+            'provinsi_guru',
+            'kabupaten_guru',
+            'kecamatan_guru',
+            'distrik_guru',
+            'kampung_guru',
+            'rt_rw_guru',
+            'kode_pos_guru'
+        ],
+
+        // 'Pendidikan' => [
+        //     'pendidikan',
+        //     'perguruan_tinggi',
+        //     'fakultas',
+        //     'program_studi',
+        //     'gelar_akademik',
+        //     'tahun_masuk_kuliah',
+        //     'tahun_lulus_kuliah',
+        //     'nomor_ijazah',
+        //     'bidang_keahlian',
+        //     'sertifikasi_pendidik',
+        //     'nomor_sertifikat_pendidik'
+        //     ],
+
+        'Data Kepegawaian' => [
+            'status_kepegawaian',
+            'jenis_guru',
+            'jabatan_guru',
+            'pangkat_golongan',
+            'tmt',
+            'tanggal_mulai_bertugas',
+            'masa_kerja',
+            'nomor_sk_pengangkatan',
+            'tanggal_sk_pengangkatan',
+            'instansi_induk'
+        ],
+
+        // 'Penugasan di Sekolah' => [
+        //     'jabatan_tambahan',
+        //     'semester'],
     ],
     'kepala_sekolah' => [
-        'Identitas Pribadi' => ['nip_kepala', 'tempat_lahir', 'tanggal_lahir', 'nuptk', 'gelar_depan', 'gelar_belakang', 'agama_guru', 'kewarganegaraan_guru', 'nik_guru', 'status_perkawinan'],
-        'Kontak & Alamat' => ['telepon', 'whatsapp', 'email_dinas_kepsek', 'email_pribadi', 'alamat', 'provinsi_guru', 'kabupaten_guru', 'kecamatan_guru', 'distrik_guru', 'kampung_guru', 'rt_rw_guru', 'kode_pos_guru'],
-        'Riwayat Pendidikan' => ['pendidikan', 'perguruan_tinggi', 'fakultas', 'program_studi', 'gelar_akademik', 'tahun_masuk_kuliah', 'tahun_lulus_kuliah', 'nomor_ijazah', 'bidang_keahlian', 'pendidikan_pelatihan'],
-        'Data Kepegawaian' => ['status_kepegawaian', 'jenis_guru', 'pangkat_golongan', 'jabatan_guru', 'tmt', 'tanggal_mulai_bertugas', 'masa_kerja', 'nomor_sk_pengangkatan', 'tanggal_sk_pengangkatan', 'instansi_induk'],
-        'Jabatan Kepala Sekolah' => ['jabatan_saat_ini', 'sk_kepala_sekolah', 'tanggal_sk_kepala', 'tanggal_mulai_menjabat', 'periode_jabatan', 'status_jabatan', 'jenjang_pendidikan'],
-        'Sertifikasi & Kompetensi' => ['sertifikasi_pendidik', 'nomor_sertifikat_pendidik', 'bidang_sertifikasi', 'nrg', 'sertifikat_kompetensi_kepsek', 'pelatihan_kepemimpinan', 'pelatihan_manajemen_sekolah', 'pelatihan_kurikulum', 'pengembangan_keprofesian'],
-        'Riwayat Jabatan' => ['jabatan_sebelumnya', 'instansi_sebelumnya', 'tahun_mulai_jabatan', 'tahun_selesai_jabatan', 'nomor_sk_jabatan', 'keterangan_jabatan'],
+        'Identitas Pribadi' => [
+            'nama_kepala',
+            'nip_kepala',
+            'tempat_lahir',
+            'tanggal_lahir',
+            'nuptk',
+            // 'gelar_depan',
+            // 'gelar_belakang',
+            'agama_guru',
+            'kewarganegaraan_guru',
+            'nik_guru',
+            'status_perkawinan'
+        ],
+
+
+        'Kontak & Alamat' => [
+            'telepon',
+            'whatsapp',
+            'email_dinas_kepsek',
+            'email_pribadi',
+            'alamat',
+            'provinsi_guru',
+            'kabupaten_guru',
+            'kecamatan_guru',
+            'distrik_guru',
+            'kampung_guru',
+            'rt_rw_guru',
+            'kode_pos_guru'
+        ],
+
+        // 'Riwayat Pendidikan' => [
+        //     'pendidikan',
+        //     'perguruan_tinggi',
+        //     'fakultas',
+        //     'program_studi',
+        //     'gelar_akademik',
+        //     'tahun_masuk_kuliah',
+        //     'tahun_lulus_kuliah',
+        //     'nomor_ijazah',
+        //     'bidang_keahlian',
+        //     'pendidikan_pelatihan'],
+
+        'Data Kepegawaian' => [
+            'status_kepegawaian',
+            'jenis_guru',
+            'pangkat_golongan',
+            'jabatan_guru',
+            'tmt',
+            'tanggal_mulai_bertugas',
+            'masa_kerja',
+            'nomor_sk_pengangkatan',
+            'tanggal_sk_pengangkatan',
+            'instansi_induk'
+        ],
+
+        'Jabatan Kepala Sekolah' => [
+            'jabatan_saat_ini',
+            'sk_kepala_sekolah',
+            'tanggal_sk_kepala',
+            'tanggal_mulai_menjabat',
+            'periode_jabatan',
+            'status_jabatan',
+            'jenjang_pendidikan'
+        ],
+
+        'Sertifikasi & Kompetensi' => [
+            'sertifikasi_pendidik',
+            'nomor_sertifikat_pendidik',
+            'bidang_sertifikasi',
+            'nrg',
+            'sertifikat_kompetensi_kepsek',
+            'pelatihan_kepemimpinan',
+            'pelatihan_manajemen_sekolah',
+            'pelatihan_kurikulum',
+            'pengembangan_keprofesian'
+        ],
+
+        // 'Riwayat Jabatan' => [
+        //     'jabatan_sebelumnya',
+        //     'instansi_sebelumnya',
+        //     'tahun_mulai_jabatan',
+        //     'tahun_selesai_jabatan',
+        //     'nomor_sk_jabatan',
+        //     'keterangan_jabatan'],
+
     ],
-    'operator' => ['Data Pribadi' => ['telepon', 'whatsapp', 'tempat_lahir', 'tanggal_lahir'], 'Pendidikan' => ['pendidikan'], 'Kontak & Alamat' => ['alamat']],
-    default => ['Data Pribadi' => ['telepon', 'whatsapp', 'tempat_lahir', 'tanggal_lahir'], 'Pendidikan' => ['pendidikan'], 'Kontak & Alamat' => ['alamat']],
+    'operator' => [
+        'Data Pribadi' => [
+            'nama_lengkap',
+            'nip',
+            'telepon',
+            'whatsapp',
+            'tempat_lahir',
+            'tanggal_lahir'
+        ],
+        'Pendidikan' => ['pendidikan'],
+        'Kontak & Alamat' => [
+            'email_pribadi',
+            'alamat'
+        ]
+    ],
+
+    'admin' => [
+        'Data Kontak' => ['nama', 'id', 'email_pribadi', 'telepon'],
+    ],
+    default => [
+        'Data Pribadi' => [
+            'telepon',
+            'whatsapp',
+            'tempat_lahir',
+            'tanggal_lahir'
+        ],
+        'Pendidikan' => ['pendidikan'],
+        'Kontak & Alamat' => [
+            'email_pribadi',
+            'alamat'
+        ]
+    ],
 };
-$sectionIcons = ['Data Pribadi' => 'bi-person-lines-fill', 'Orang Tua / Wali' => 'bi-people', 'Pendidikan' => 'bi-mortarboard', 'Kontak & Alamat' => 'bi-geo-alt'];
-$profileName = $target['nama_guru'] ?: ($target['nama_siswa'] ?: $target['nama_lengkap']);
-if (in_array($targetRole, ['guru', 'kepala_sekolah'], true)) $profileName = trim(trim((string)($profile['gelar_depan'] ?? '') . ' ' . $profileName) . (!empty($profile['gelar_belakang']) ? ', ' . trim((string)$profile['gelar_belakang']) : ''));
+$sectionIcons = [
+    'Data Pribadi' => 'bi-person-lines-fill',
+    'Orang Tua / Wali' => 'bi-people',
+    'Kontak & Darurat' => 'bi-telephone',
+    'Pendidikan' => 'bi-mortarboard',
+    'Kontak & Alamat' => 'bi-geo-alt',
+];
+$profileName = $target['nama_guru'] ?: ($target['nama_siswa'] ?:
+        $target['nama_lengkap']);
+
+if (in_array($targetRole, ['guru', 'kepala_sekolah'], true))
+    $profileName = trim(trim((string)($profile['gelar_depan'] ?? '') . ' ' .
+        $profileName) . (!empty($profile['gelar_belakang']) ? ', ' . trim((string)
+    $profile['gelar_belakang']) : ''));
 $statusKey = (string)($profile['status_verifikasi'] ?? 'belum_lengkap');
 $statusClass = $statusKey === 'terverifikasi' ? 'is-verified' : (in_array($statusKey, ['perlu_perbaikan', 'ditolak'], true) ? 'is-attention' : '');
 $genderValue = $isLinkedStudent ? ($target['siswa_jenis_kelamin'] ?? '') : ($isLinkedTeacher ? ($target['guru_jenis_kelamin'] ?? '') : '');
 $genderLabel = $genderValue === 'L' ? 'Laki-laki' : ($genderValue === 'P' ? 'Perempuan' : 'Belum dicatat');
 $showBiodataForm = ($isReviewer && $targetId !== $userId) || $error !== '' || isset($_GET['menunggu']);
+
 ?>
 <div class="dashboard-heading">
     <div><span class="account-eyebrow">Identitas dan kelengkapan data</span>
@@ -45,8 +309,9 @@ $showBiodataForm = ($isReviewer && $targetId !== $userId) || $error !== '' || is
         <p>Data biodata dipisahkan dari akun login dan menyesuaikan peran Anda.</p>
     </div>
 </div>
+
 <?php if ($flashMessage): ?><div class="alert alert-<?= e($flashMessage['type']) ?>" role="status"><?= e($flashMessage['message']) ?></div><?php endif; ?>
-<?php if (isset($_GET['menunggu']) && $targetId === $userId): ?><div class="alert alert-info" role="status"><strong>Akses dashboard menunggu pemeriksaan biodata.</strong> Lengkapi bagian wajib lalu kirim untuk diperiksa. Status saat ini: <?= e($statusLabels[$statusKey] ?? 'Belum lengkap') ?>.</div><?php endif; ?>
+<?php if (isset($_GET['menunggu']) && $targetId === $userId): ?><div class="alert alert-info" role="status"><strong>Akses dashboard menunggu pemeriksaan biodata.</strong> <?php if ($targetRole === 'siswa'): ?>Lengkapi 10 data penting yang bertanda <span class="text-danger">*</span>, lalu simpan. Setelah semua lengkap, tombol persetujuan admin akan aktif dan admin dapat langsung memverifikasi biodata.<?php else: ?>Lengkapi bagian wajib lalu kirim untuk diperiksa.<?php endif; ?> Status saat ini: <?= e($statusLabels[$statusKey] ?? 'Belum lengkap') ?>.</div><?php endif; ?>
 <?php if ($error !== ''): ?><div class="alert alert-danger" role="alert"><?= e($error) ?></div><?php endif; ?>
 <div class="account-profile-page biodata-profile-page">
     <section class="card account-profile-hero biodata-profile-hero <?= $targetRole === 'guru' ? 'biodata-teacher-layout' : ($targetRole === 'siswa' ? 'biodata-student-layout' : ($targetRole === 'kepala_sekolah' ? 'biodata-principal-layout' : '')) ?>">
@@ -146,7 +411,22 @@ $showBiodataForm = ($isReviewer && $targetId !== $userId) || $error !== '' || is
                 <div><span>Jabatan / unit</span><strong>Belum tersedia sebagai data terpisah</strong></div>
             </div>
         <?php endif; ?>
-        <div class="biodata-hero-actions no-print"><button class="btn btn-outline-primary biodata-print-button" type="button" id="biodataPrintButton"><i class="bi bi-printer me-1"></i>Cetak Biodata</button><button class="btn btn-primary account-edit-toggle biodata-edit-toggle" type="button" id="biodataFormToggle" aria-expanded="<?= $showBiodataForm ? 'true' : 'false' ?>" aria-controls="biodataFormPanel"><i class="bi <?= $showBiodataForm ? 'bi-dash-lg' : 'bi-plus-lg' ?>" id="biodataFormToggleIcon"></i><span id="biodataFormToggleLabel"><?= $showBiodataForm ? 'Tutup formulir biodata' : ($statusKey === 'terverifikasi' ? 'Ubah Biodata' : 'Lengkapi Biodata') ?></span></button></div>
+        <div class="biodata-hero-actions no-print">
+            <button class="btn btn-outline-primary biodata-print-button" type="button" id="biodataPrintButton">
+                <i class="bi bi-printer me-1"></i>Cetak Biodata
+            </button>
+            <button
+                class="btn btn-primary account-edit-toggle biodata-edit-toggle"
+                type="button"
+                id="biodataFormToggle"
+                aria-expanded="<?= $showBiodataForm ? 'true' : 'false' ?>"
+                aria-controls="biodataFormPanel">
+                <i class="bi <?= $showBiodataForm ? 'bi-dash-lg' : 'bi-plus-lg' ?>" id="biodataFormToggleIcon"></i>
+                <span id="biodataFormToggleLabel">
+                    <?= $showBiodataForm ? 'Tutup formulir biodata' : ($statusKey === 'terverifikasi' ? 'Ubah Biodata' : 'Lengkapi Biodata') ?>
+                </span>
+            </button>
+        </div>
     </section>
     <?php if ($targetRole === 'guru'): ?>
         <div class="account-edit-modal biodata-detail-modal" id="biodataDetailPanel" hidden>
@@ -628,21 +908,84 @@ $showBiodataForm = ($isReviewer && $targetId !== $userId) || $error !== '' || is
                     <p><?= $isReviewer && $targetId !== $userId ? 'Tinjau data yang dikirim dan berikan keputusan atau catatan koreksi.' : 'Isi data yang boleh Anda kelola. Data induk sekolah ditampilkan sebagai baca saja.' ?></p>
                 </div><button class="account-modal-close" type="button" data-biodata-modal-close aria-label="Tutup"><i class="bi bi-x-lg"></i></button>
             </header>
-            <?php if (!$isReviewer || $targetId === $userId): ?><nav class="biodata-tabs" aria-label="Bagian biodata"><?php $sectionIndex = 0;
-                                                                                                                        foreach ($roleSections as $sectionName => $sectionFields): ?><a href="#bio-section-<?= $sectionIndex ?>"><i class="bi <?= e($sectionIcons[$sectionName] ?? 'bi-card-text') ?>"></i><?= e($sectionName) ?></a><?php $sectionIndex++;
-                                                                                                                                                                                                                                                                                                                                    endforeach; ?><?php if ($isLinkedStudent): ?><a href="#bio-school-data"><i class="bi bi-building"></i>Data Sekolah</a><?php elseif ($isLinkedTeacher): ?><a href="#bio-school-data"><i class="bi bi-journal-bookmark"></i>Penugasan</a><?php elseif ($targetRole === 'kepala_sekolah'): ?><a href="#bio-school-data"><i class="bi bi-building"></i>Data Sekolah</a><?php endif; ?></nav><?php endif; ?>
+            <?php if (!$isReviewer || $targetId === $userId): ?>
+                <nav class="biodata-tabs" aria-label="Bagian biodata">
+                    <?php $sectionIndex = 0; ?>
+                    <?php foreach ($roleSections as $sectionName => $sectionFields): ?>
+                        <a href="#bio-section-<?= $sectionIndex ?>">
+                            <i class="bi <?= e($sectionIcons[$sectionName] ?? 'bi-card-text') ?>"></i>
+                            <?= e($sectionName) ?>
+                        </a>
+                        <?php $sectionIndex++; ?>
+                    <?php endforeach; ?>
+                    <?php if ($isLinkedStudent): ?>
+                        <a href="#bio-school-data"><i class="bi bi-building"></i>Data Sekolah</a>
+                    <?php elseif ($isLinkedTeacher): ?>
+                        <a href="#bio-school-data"><i class="bi bi-journal-bookmark"></i>Penugasan</a>
+                    <?php elseif ($targetRole === 'kepala_sekolah'): ?>
+                        <a href="#bio-school-data"><i class="bi bi-building"></i>Data Sekolah</a>
+                    <?php endif; ?>
+                </nav>
+            <?php endif; ?>
             <?php if ($isReviewer && $targetId !== $userId): ?>
                 <div class="biodata-form-body">
-                    <div class="row g-3"><?php foreach ($labels as $field => $label): $value = $profile[$field] ?? '';
-                                                if ($field === 'tanggal_lahir' && $isLinkedStudent) $value = $target['siswa_tanggal_lahir'] ?? '';
-                                                if ($field === 'alamat' && $isLinkedStudent) $value = $profile['alamat'] ?: ($target['siswa_alamat'] ?? '');
-                                                if ($field === 'alamat' && $isLinkedTeacher) $value = $target['guru_alamat'] ?? ''; ?><div class="col-md-6">
-                                <div class="biodata-readonly-panel"><small><?= e($label) ?></small><strong><?php if (str_starts_with($field, 'dokumen_')): ?><?= !empty($value) ? '<a href="media/biodata_document.php?user=' . $targetId . '&amp;field=' . e($field) . '" target="_blank" rel="noopener">Lihat dokumen</a>' : 'Belum diunggah' ?><?php else: ?><?= e($value !== '' ? $value : 'Belum diisi') ?><?php endif; ?></strong></div>
-                            </div><?php endforeach; ?></div>
-                    <?php if (!$auditReady): ?><div class="alert alert-warning mt-3">Riwayat pemeriksaan belum aktif. Keputusan belum dapat disimpan sampai migrasi riwayat tersedia.</div><?php endif; ?>
-                    <form method="post" class="row g-3 mt-2"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="review">
-                        <div class="col-12"><label class="form-label" for="catatan_verifikasi">Catatan pemeriksa <span class="text-secondary">(wajib untuk koreksi atau penolakan)</span></label><textarea class="form-control" id="catatan_verifikasi" name="catatan_verifikasi" maxlength="500" rows="3"><?= e($profile['catatan_verifikasi'] ?? '') ?></textarea></div>
-                        <div class="col-12 d-flex flex-wrap gap-2"><button class="btn btn-success" name="decision" value="terverifikasi" <?= $missing || !$auditReady ? 'disabled title="Lengkapi biodata dan pastikan migrasi audit aktif"' : '' ?>><i class="bi bi-check-circle me-1"></i>Setujui Biodata</button><button class="btn btn-outline-warning" name="decision" value="perlu_perbaikan" <?= !$auditReady ? 'disabled' : '' ?>><i class="bi bi-pencil-square me-1"></i>Minta Perbaikan</button><?php if ($rejectionReady): ?><button class="btn btn-outline-danger" name="decision" value="ditolak" <?= !$auditReady ? 'disabled' : '' ?>>Tolak Pengajuan</button><?php endif; ?></div>
+                    <div class="row g-3">
+                        <?php foreach ($labels as $field => $label): ?>
+                            <?php
+                            $value = $profile[$field] ?? '';
+                            if ($field === 'tanggal_lahir' && $isLinkedStudent) {
+                                $value = $target['siswa_tanggal_lahir'] ?? '';
+                            }
+                            if ($field === 'alamat' && $isLinkedStudent) {
+                                $value = $profile['alamat'] ?: ($target['siswa_alamat'] ?? '');
+                            }
+                            if ($field === 'alamat' && $isLinkedTeacher) {
+                                $value = $target['guru_alamat'] ?? '';
+                            }
+                            ?>
+                            <div class="col-md-6">
+                                <div class="biodata-readonly-panel">
+                                    <small><?= e($label) ?></small>
+                                    <strong>
+                                        <?php if (str_starts_with($field, 'dokumen_')): ?>
+                                            <?= !empty($value)
+                                                ? '<a href="media/biodata_document.php?user=' . $targetId . '&amp;field=' . e($field) . '" target="_blank" rel="noopener">Lihat dokumen</a>'
+                                                : 'Belum diunggah' ?>
+                                        <?php else: ?>
+                                            <?= e($value !== '' ? $value : 'Belum diisi') ?>
+                                        <?php endif; ?>
+                                    </strong>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php if (!$auditReady): ?>
+                        <div class="alert alert-warning mt-3">
+                            Riwayat pemeriksaan tambahan belum aktif. Keputusan tetap disimpan pada status biodata, tetapi belum muncul pada daftar riwayat.
+                        </div>
+                    <?php endif; ?>
+                    <form method="post" class="row g-3 mt-2">
+                        <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="review">
+                        <div class="col-12">
+                            <label class="form-label" for="catatan_verifikasi">
+                                Catatan pemeriksa <span class="text-secondary">(wajib untuk koreksi atau penolakan)</span>
+                            </label>
+                            <textarea class="form-control" id="catatan_verifikasi" name="catatan_verifikasi" maxlength="500" rows="3"><?= e($profile['catatan_verifikasi'] ?? '') ?></textarea>
+                        </div>
+                        <div class="col-12 d-flex flex-wrap gap-2">
+                            <button class="btn btn-success" name="decision" value="terverifikasi" <?= $missing ? 'disabled title="Lengkapi semua kolom wajib terlebih dahulu"' : '' ?>>
+                                <i class="bi bi-check-circle me-1"></i>Setujui Biodata
+                            </button>
+                            <button class="btn btn-outline-warning" name="decision" value="perlu_perbaikan">
+                                <i class="bi bi-pencil-square me-1"></i>Minta Perbaikan
+                            </button>
+                            <?php if ($rejectionReady): ?>
+                                <button class="btn btn-outline-danger" name="decision" value="ditolak">
+                                    Tolak Pengajuan
+                                </button>
+                            <?php endif; ?>
+                        </div>
                     </form>
                 </div>
             <?php else: ?>
@@ -761,6 +1104,7 @@ $showBiodataForm = ($isReviewer && $targetId !== $userId) || $error !== '' || is
             if (open) detailDialog?.focus();
             else detailToggle?.focus();
         };
+        if (new URLSearchParams(window.location.search).get('preview') === '1') setDetailOpen(true);
         detailToggle?.addEventListener('click', () => setDetailOpen(true));
         detailPanel?.querySelectorAll('[data-biodata-detail-close]').forEach(button => button.addEventListener('click', () => setDetailOpen(false)));
         document.addEventListener('keydown', event => {

@@ -7,6 +7,10 @@
                 <span><?= e($portalProfile['nama'] ?? 'SMP Negeri 4 Pirime') ?><small>Portal Informasi Resmi</small></span>
             </a>
             <p class="footer-copy">Informasi sekolah untuk siswa, orang tua, dan masyarakat.</p>
+            <div class="footer-quick-actions" aria-label="Akses cepat">
+                <a class="footer-quick-action footer-quick-action--login" href="../login.php">Login</a>
+                <a class="footer-quick-action footer-quick-action--admission" href="ppdb.php#formulir">Daftar PPDB</a>
+            </div>
             <?php if (!empty($portalSocialLinks)): ?><div class="footer-social-links" aria-label="Media sosial sekolah">
                     <?php foreach ($portalSocialLinks as $socialIcon => $socialUrl): ?><a class="footer-social-button" href="<?= e($socialUrl) ?>" target="_blank" rel="noopener noreferrer" aria-label="SMP Negeri 4 Pirime di <?= e(ucwords(str_replace('-', ' ', $socialIcon))) ?>"><i class="bi bi-<?= e($socialIcon) ?>" aria-hidden="true"></i></a><?php endforeach; ?>
                 </div><?php endif; ?>
@@ -21,11 +25,11 @@
         </nav>
         <nav class="footer-link-group" aria-label="Informasi dan layanan">
             <h2>Informasi & Layanan</h2>
-            <a href="berita.php">Berita</a><a href="pengumuman.php">Pengumuman</a><a href="prestasi.php">Prestasi</a><a href="galeri.php">Galeri</a><a href="unduhan.php">Pusat Unduhan</a><a href="pencarian.php">Pencarian</a><a href="laporan_pengembangan.php">Laporan Pengembangan</a><a href="privasi.php">Kebijakan Privasi</a>
+            <a href="berita.php">Blog &amp; Artikel</a><a href="pengumuman.php">Pengumuman</a><a href="prestasi.php">Prestasi</a><a href="galeri.php">Galeri</a><a href="unduhan.php">Pusat Unduhan</a><a href="faq.php">FAQ</a><a href="pencarian.php">Pencarian</a><a href="laporan_pengembangan.php">Laporan Pengembangan</a><a href="privasi.php">Kebijakan Privasi</a>
         </nav>
         <section class="footer-contact-group" aria-label="Kontak sekolah">
             <h2>Hubungi Sekolah</h2>
-            <p><?= nl2br(e($portalProfile['alamat'] ?: 'Alamat sekolah belum diatur.')) ?></p>
+            <p><?= nl2br(e(portal_school_address($portalProfile) ?: 'Alamat sekolah belum diatur.')) ?></p>
             <?php $footerPhone = portal_phone_uri($portalProfile['telepon'] ?? null);
             $footerEmail = portal_email_address($portalProfile['email'] ?? null); ?>
             <?php if ($footerPhone !== ''): ?><a class="footer-contact-link" href="tel:<?= e($footerPhone) ?>"><i class="bi bi-telephone-fill" aria-hidden="true"></i><span><?= e($portalProfile['telepon']) ?></span></a><?php endif; ?>

@@ -18,6 +18,7 @@ $pageTitle = 'Login';
 
 <body class="login-page">
     <main class="login-stage">
+        <div class="login-stage__content">
         <section class="login-panel" aria-labelledby="loginTitle">
             <div class="login-brand">
                 <img src="assets/Lambang-Sekolah-SMP-Negeri-4-Pirime.png" alt="Lambang SMP Negeri 4 Pirime" class="login-logo">
@@ -27,6 +28,7 @@ $pageTitle = 'Login';
             </div>
             <?php if (!empty($_GET['inactive'])): ?>
                 <div class="alert alert-warning" role="alert">Akun ini tidak aktif atau aksesnya telah dicabut. Hubungi pengelola sekolah.</div>
+                
             <?php endif; ?>
             <?php if (!empty($error)): ?>
                 <div class="alert alert-danger" role="alert"><?= e($error) ?></div>
@@ -35,11 +37,10 @@ $pageTitle = 'Login';
                 <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
                 <div class="mb-3"><label class="form-label" for="loginUsername">Username</label>
                     <div class="login-input-wrap"><i class="bi bi-person" aria-hidden="true"></i>
-                        <input class="form-control" id="loginUsername" name="username" placeholder="Masukkan identitas login yang diberikan sekolah" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+                        <input class="form-control" id="loginUsername" name="username" placeholder="Masukkan username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
                     </div>
-                    <!-- <div class="form-text">Siswa masuk dengan NIS; Guru/Kepala Sekolah dengan NIP; Operator dengan ID Operator; Super Admin dengan username.</div> -->
+                    <!-- <div class="form-text">Untuk siswa, username adalah NIS. Gunakan kata sandi awal dari Super Admin; NIS bukan kata sandi. Saat pertama masuk, Anda diminta membuat kata sandi baru. Jika lupa, minta Super Admin meresetnya.</div> -->
                 </div>
-                <!-- <p class="small text-secondary mb-3">Belum mempunyai akun atau lupa password? Siswa, Guru, dan Kepala Sekolah dapat menghubungi Operator. Operator menghubungi Super Admin. Akun hanya dibuat oleh Super Admin.</p> -->
                 <div class="mb-4">
                     <label class="form-label" for="loginPassword">Password</label>
                     <div class="login-input-wrap">
@@ -70,6 +71,13 @@ $pageTitle = 'Login';
             <div class="login-divider"><span>atau</span></div>
             <a class="login-back-link" href="public/index.php"><i class="bi bi-arrow-left" aria-hidden="true"></i>Kembali ke portal publik sekolah</a>
         </section>
+        <footer class="login-footer" aria-label="Informasi hak cipta">
+            <div class="login-footer__credit">
+                <p class="login-footer__message">Melayani dengan integritas, disiplin, dan semangat belajar.</p>
+            </div>
+            <p class="login-footer__legal">© <?= date('Y') ?> SMP Negeri 4 Pirime. Hak cipta dilindungi.</p>
+        </footer>
+        </div>
     </main>
     <script>
         document.getElementById('toggleLoginPassword')?.addEventListener('click', function() {

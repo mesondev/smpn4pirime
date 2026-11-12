@@ -12,6 +12,7 @@ node_modules/
 /outputs/
 /tmp/
 /storage/logs/*.log
+/storage/cache/regions/
 /.env
 /.env.*
 !/.env.example
@@ -25,3 +26,4 @@ node_modules/
 /setup_admin.php
 
 database/backups/
+/storage/xampp_mysql_data*/

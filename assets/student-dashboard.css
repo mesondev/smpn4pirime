@@ -1374,3 +1374,74 @@
     background: #482a2c;
     color: #f3a8a5;
 }
+
+/* Biodata summary used on both verified and awaiting-review student dashboards. */
+.student-biodata-panel {
+    margin-block: 0 24px;
+    padding: clamp(18px, 2.4vw, 28px);
+    border: 1px solid var(--line, #e5eaf1);
+    border-radius: 18px;
+    background: var(--surface, #fff);
+    box-shadow: 0 10px 28px rgb(23 43 77 / 5%);
+}
+
+.student-biodata-heading,
+.student-biodata-title-group,
+.student-biodata-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.student-biodata-title-group { justify-content: flex-start; min-width: 0; }
+.student-biodata-title-group h2 { margin: 0 0 5px; color: var(--ink, #172b4d); font-size: 1.18rem; font-weight: 750; }
+.student-biodata-title-group p { margin: 0; color: var(--muted, #64748b); line-height: 1.55; }
+.student-biodata-status { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 8px 12px; border-radius: 999px; font-size: .82rem; font-weight: 700; }
+.student-biodata-status.verified { color: #087443; background: #e7f7ef; }
+.student-biodata-status.pending { color: #875b00; background: #fff4d6; }
+.student-biodata-status.needs-update { color: #a33330; background: #fff0ef; }
+.student-biodata-progress { height: 8px; margin: 20px 0 13px; overflow: hidden; border-radius: 99px; background: #edf1f6; }
+.student-biodata-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3979e8, #47b89a); transition: width .25s ease; }
+.student-biodata-actions { color: var(--muted, #64748b); font-size: .86rem; }
+.student-biodata-details { margin-top: 18px; border: 1px solid var(--line, #e5eaf1); border-radius: 13px; overflow: hidden; }
+.student-biodata-details summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; cursor: pointer; color: var(--ink, #172b4d); background: var(--surface-soft, #f7f9fc); font-weight: 700; list-style: none; }
+.student-biodata-details summary::-webkit-details-marker { display: none; }
+.student-biodata-details[open] summary i { transform: rotate(180deg); }
+.student-biodata-details summary i { transition: transform .16s ease; }
+.student-biodata-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; margin: 0; padding: 4px 16px 12px; }
+.student-biodata-item { min-width: 0; padding: 13px 0; border-bottom: 1px solid var(--line, #e5eaf1); }
+.student-biodata-item dt { margin-bottom: 5px; color: var(--muted, #64748b); font-size: .78rem; font-weight: 650; }
+.student-biodata-item dd { margin: 0; color: var(--ink, #172b4d); overflow-wrap: anywhere; line-height: 1.55; }
+.student-biodata-item dd a { color: #2864c5; text-decoration: none; }
+.student-biodata-item dd a:hover { text-decoration: underline; }
+.student-biodata-empty,
+.student-biodata-review-note { display: flex; align-items: flex-start; gap: 9px; margin: 16px 0 0; padding: 13px 15px; border-radius: 11px; color: #53667d; background: #f4f7fb; line-height: 1.55; }
+.student-biodata-empty i,
+.student-biodata-review-note i { margin-top: 3px; color: #3979e8; }
+.student-biodata-review-note.needs-update { display: block; color: #8d3431; background: #fff1ef; }
+.student-biodata-review-note.needs-update i { color: inherit; }
+.student-pending-hero { align-items: stretch; }
+.student-pending-process { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 12px; max-width: 310px; padding: 20px; border: 1px solid rgb(255 255 255 / 24%); border-radius: 16px; background: rgb(255 255 255 / 11%); }
+.student-pending-process-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: #fff; background: rgb(255 255 255 / 17%); font-size: 1.25rem; }
+.student-pending-process strong { color: #fff; }
+.student-pending-process p { margin: 5px 0 0; color: rgb(255 255 255 / 82%); font-size: .88rem; line-height: 1.55; }
+.student-dashboard-pending { width: 100%; }
+:root[data-theme="dark"] .student-biodata-panel { border-color: #34445a; background: var(--surface, #172337); }
+:root[data-theme="dark"] .student-biodata-details { border-color: #34445a; }
+:root[data-theme="dark"] .student-biodata-details summary { color: #e5edf8; background: #202d40; }
+:root[data-theme="dark"] .student-biodata-item { border-color: #34445a; }
+:root[data-theme="dark"] .student-biodata-title-group h2,
+:root[data-theme="dark"] .student-biodata-item dd { color: #e5edf8; }
+:root[data-theme="dark"] .student-biodata-empty,
+:root[data-theme="dark"] .student-biodata-review-note { color: #c4d1e2; background: #202d40; }
+:root[data-theme="dark"] .student-biodata-status.pending { color: #f2d58d; background: #443617; }
+:root[data-theme="dark"] .student-biodata-status.needs-update { color: #f3a8a5; background: #482a2c; }
+
+@media (max-width: 680px) {
+    .student-biodata-heading { align-items: flex-start; flex-direction: column; }
+    .student-biodata-title-group { align-items: flex-start; }
+    .student-biodata-actions { align-items: flex-start; flex-direction: column; }
+    .student-biodata-grid { grid-template-columns: minmax(0, 1fr); }
+    .student-pending-process { max-width: none; }
+}

@@ -36,57 +36,50 @@ Sistem Informasi Manajemen Sekolah berbasis PHP dan MySQL/MariaDB. SIMS menghubu
 - PHP 8.1 atau lebih baru
 - Ekstensi PHP `pdo_mysql`, `mbstring`, dan `fileinfo` aktif
 - MySQL atau MariaDB
-- Apache (Laragon atau XAMPP untuk pengembangan lokal)
+- Apache dan MySQL/MariaDB melalui XAMPP
 - Browser modern
 
-> Impor berkas XLS/XLSX memerlukan paket PhpSpreadsheet dan ekstensi PHP `zip`. Impor CSV tetap tersedia tanpa dependensi tersebut. Backup berkas juga memerlukan ekstensi PHP `zip` pada PHP CLI Laragon.
+> Aplikasi berjalan tanpa Composer atau paket PHP pihak ketiga. Impor data guru memakai CSV; lembar Excel harus disimpan sebagai CSV UTF-8 sebelum diunggah. Backup berkas memerlukan ekstensi PHP `zip` pada PHP CLI.
 
 ## Tes otomatis
 
-Proyek menyediakan runner tes tanpa paket eksternal. Dari terminal Laragon pada folder proyek, jalankan:
+Proyek menyediakan runner tes tanpa paket eksternal. Dari PowerShell pada folder proyek, jalankan:
 
 ```powershell
-composer test
+php tests/run.php
 ```
 
 Runner memeriksa helper HTML/CSRF dan izin peran, parser serta dependensi migrasi, sintaks seluruh berkas PHP, sintaks JavaScript bila Node.js tersedia, keseimbangan blok CSS, dan checksum/status migrasi database lokal. Pemeriksaan database hanya membaca data; runner tidak membuat, mengubah, atau menghapus tabel maupun baris. Jika database lokal tidak tersedia, pemeriksaan tersebut dilewati secara terlihat. Atur `SIMS_TEST_DB=1` untuk menjadikan koneksi database wajib dan menggagalkan tes bila database tidak tersedia.
 
-Jika Apache aktif, runner juga menguji halaman login dan rute publik pada `http://localhost/sims_smpn4`. Untuk Laragon dengan virtual host berbeda, set URL proyek dan wajibkan uji HTTP:
+Jika Apache aktif, runner juga menguji halaman login dan rute publik pada `http://localhost/sims_smpn4`. Untuk alamat lokal berbeda, set URL proyek dan wajibkan uji HTTP:
 
 ```powershell
 $env:SIMS_TEST_BASE_URL = 'http://sims_smpn4.test'
 $env:SIMS_TEST_HTTP = '1'
-composer test
+php tests/run.php
 ```
 
 Kegagalan tes menghasilkan exit code bukan nol agar dapat dipakai di proses otomatis.
 
-## Instalasi lokal dengan Laragon
-
-1. Gunakan folder proyek ini sebagai document root Apache Laragon. Jika proyek berada di luar `C:\laragon\www` (misalnya `C:\xampp\htdocs\sims_smpn4`), buat virtual host Laragon yang menunjuk ke folder tersebut; jangan mengedit salinan lain karena perubahan kode harus tetap berada di workspace yang sama.
-2. Jalankan Apache dan MySQL/MariaDB dari Laragon. Pastikan versi PHP Laragon yang aktif minimal 8.1 dan ekstensi `pdo_mysql`, `mbstring`, serta `fileinfo` aktif.
-3. Buat atau impor database `sims_db` melalui HeidiSQL atau phpMyAdmin Laragon menggunakan `database.sql`.
-4. `config/database.php` memakai default lokal `127.0.0.1:3306`, database `sims_db`, pengguna `root`, dan password kosong. Sesuaikan file konfigurasi lokal yang diabaikan Git jika instalasi Laragon Anda memakai port/kredensial berbeda. Nilai `.env.example` hanya contoh; aplikasi tidak membaca file `.env` secara otomatis.
-5. Buka **Laragon Terminal** agar perintah `php` memakai versi PHP aktif Laragon. Atur lokasi backup privat di luar document root, lalu periksa dan buat backup sebelum migrasi:
-
-   ```powershell
-   $env:SIMS_BACKUP_DIR = 'C:\laragon\data\sims_smpn4_backups'
-   php tools/backup.php --check
-   php tools/backup.php
-   php database/migrate.php
-   ```
-
-   Runner migrasi hanya untuk CLI, mencatat checksum/status migrasi, dan menolak database yang bukan `sims_db`.
-6. Buka alamat virtual host yang dibuat Laragon (umumnya `http://sims_smpn4.test/`) untuk dashboard, atau tambahkan `/public/` untuk portal publik. Jika memakai alias localhost, gunakan URL yang sesuai dengan konfigurasi Apache Anda.
-7. Buat akun Super Admin melalui `setup_admin.php`, lalu hapus atau nonaktifkan endpoint tersebut setelah akun dibuat.
-
-> Jangan arahkan Laragon ke database produksi. Migrasi mengubah struktur database; buat backup terlebih dahulu dan pastikan targetnya adalah database lokal `sims_db`.
-
 ## Instalasi lokal dengan XAMPP
 
-Proyek ini juga dapat dijalankan dari `C:\xampp\htdocs\sims_smpn4`. Jalankan Apache/MySQL dari XAMPP, buka `http://localhost/sims_smpn4/`, dan ikuti langkah database, konfigurasi lokal, migrasi, serta setup admin di atas. Gunakan terminal yang sesuai dengan versi PHP aktif XAMPP saat menjalankan migrasi.
+1. Letakkan proyek di `C:\xampp\htdocs\sims_smpn4`, lalu jalankan Apache dan MySQL pada XAMPP Control Panel.
+2. Pastikan PHP XAMPP minimal 8.1 dan aktifkan `pdo_mysql`, `mbstring`, `fileinfo`, serta `zip` pada `C:\xampp\php\php.ini`; restart Apache setelah perubahan.
+3. Impor `database.sql` ke MySQL lokal melalui phpMyAdmin bila database belum ada. Konfigurasi bawaan `config/database.php` memakai `127.0.0.1:3306`, `sims_db`, user `root`, dan password kosong. Jangan mengganti atau mengimpor ulang database yang sudah berisi data.
+4. Dari PowerShell di direktori proyek, buat dan verifikasi backup di luar web root sebelum migrasi:
 
-> Jalankan migrasi pada database yang benar. Buat backup yang dapat dipulihkan sebelum memperbarui database berisi data penting.
+   ```powershell
+   $env:SIMS_BACKUP_DIR = "$env:USERPROFILE\Documents\SIMS_Backups"
+   C:\xampp\php\php.exe tools/backup.php --check
+   C:\xampp\php\php.exe tools/backup.php
+   C:\xampp\php\php.exe database/migrate.php
+   ```
+
+   Runner migrasi hanya untuk CLI, mencatat checksum/status, dan menolak database selain `sims_db`. Jangan mengedit file migrasi yang sudah tercatat.
+5. Buka `http://localhost/sims_smpn4/` untuk masuk ke aplikasi. Kelola portal publik pada `http://localhost/sims_smpn4/public/`.
+6. Gunakan akun Super Admin yang sudah disiapkan. Endpoint `setup_admin.php` hanya untuk setup lokal yang terkendali; nonaktifkan setelah akun dibuat.
+
+> Jalankan migrasi hanya pada database lokal yang benar. Backup dan uji pemulihan penuh sebelum memperbarui database berisi data penting.
 
 ## Struktur proyek
 
@@ -98,12 +91,16 @@ Proyek ini juga dapat dijalankan dari `C:\xampp\htdocs\sims_smpn4`. Jalankan Apa
 - `public/` — halaman website publik.
 - `assets/templates/` — template CSV dan Excel untuk impor data guru.
 - `docs/portal-publik.md` — cara mengelola konten layanan publik, dokumen unduhan, media sosial, dan periode PPDB.
+- `docs/laporan-lengkap-navigasi-portal-publik.md` — peta menu Profil/Akademik/Informasi/PPDB, isi halaman, tata letak, sumber data, dan tindak lanjut verifikasi.
 - `modules/` — konfigurasi modul data.
 - `includes/` — autentikasi, helper, navigasi, dan layout.
 - `config/` — konfigurasi koneksi database.
 - `database.sql`, `database/migrations/` — skema awal dan perubahan database bertahap.
 - `tools/backup.php`, `tools/restore-test.php` — backup database/berkas dan uji pemulihan ke database lokal terpisah.
 - `docs/backup-restore.md` — konfigurasi, jadwal, verifikasi, dan prosedur pemulihan.
+- `student_class_history.php` — riwayat perpindahan kelas siswa dengan filter, cetak, dan ekspor CSV.
+- `staff_import.php`, `staff_export.php` — impor staf dua tahap dan ekspor CSV yang dibatasi izin.
+- `docs/module-inventory.md`, `docs/database-relationships.md`, `docs/feature-acceptance.md`, `docs/status-pengembangan-sims.md`, `docs/changelog.md` — inventaris modul, peta relasi, checklist penerimaan, status pengembangan, dan catatan perubahan.
 - `uploads/` — file profil, portal, guru, dan materi; akses file privat dilayani melalui pemeriksaan aplikasi.
 - `docs/` — panduan peran, backup/pemulihan, migrasi, dan penerapan.
 - `storage/logs/` — log harian lokal; untuk produksi arahkan `SIMS_LOG_DIR` ke luar web root.
@@ -115,7 +112,7 @@ Proyek ini juga dapat dijalankan dari `C:\xampp\htdocs\sims_smpn4`. Jalankan Apa
 - Gunakan HTTPS, password unik yang kuat, akses database minimum, dan backup rutin untuk deployment online.
 - Jangan mengunggah data siswa, password, token, atau file backup ke repositori Git.
 - Lampiran tugas dan materi disimpan privat di `uploads/` dan diunduh melalui pemeriksaan izin aplikasi; format yang didukung dibatasi dan ukuran maksimal 10 MB per berkas.
-- Backup dan uji pemulihan tersedia melalui CLI; otomasi terjadwal serta pengelolaan backup dari dashboard belum tersedia.
-- Izin per modul yang dapat dikonfigurasi, riwayat revisi konten, dan riwayat perpindahan kelas masih dapat dikembangkan lebih lanjut.
+- Backup manual tersedia melalui Dashboard Super Admin dan CLI; backup harian Windows Task Scheduler berjalan lokal. Enkripsi, salinan offsite, dan retensi otomatis belum dikonfigurasi.
+- Izin per modul dan pencatatan perubahan terstruktur tersedia untuk peran operasional. Riwayat perpindahan kelas tercatat untuk perubahan baru; impor histori lama dan halaman histori khusus masih perlu dikembangkan.
 - Uji semua peran, laporan, unggahan, dan pemulihan backup pada lingkungan pengujian sebelum aplikasi digunakan secara resmi.
 # smpn4pirime

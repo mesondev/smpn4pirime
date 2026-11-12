@@ -11,15 +11,49 @@ if (current_role() !== 'admin') {
 
 $error = '';
 $success = '';
-$roles = ['admin' => 'Super Admin', 'operator' => 'Operator', 'guru' => 'Guru', 'siswa' => 'Siswa', 'kepala_sekolah' => 'Kepala Sekolah'];
-$createRoles = ['operator' => 'Operator', 'guru' => 'Guru', 'siswa' => 'Siswa', 'kepala_sekolah' => 'Kepala Sekolah'];
+$roles = [
+    'admin'
+    => 'Super Admin',
+    'operator'
+    => 'Operator',
+    'guru'
+    => 'Guru',
+    'siswa'
+    => 'Siswa',
+    'kepala_sekolah'
+    => 'Kepala Sekolah'
+];
+
+$createRoles = [
+    'operator'
+    => 'Operator',
+    'guru'
+    => 'Guru',
+    'siswa'
+    => 'Siswa',
+    'kepala_sekolah'
+    => 'Kepala Sekolah'
+];
+
 $biodataSchemaCheck = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='biodata_pengguna'");
 $biodataSchemaCheck->execute();
-$biodataReady = (int)$biodataSchemaCheck->fetchColumn() === 1;
+$biodataReady = (int)
+$biodataSchemaCheck->fetchColumn() === 1;
 $teachers = $pdo->query("SELECT g.id,g.nama,g.nip,g.status,u.id AS linked_user_id,u.username AS linked_username FROM guru g LEFT JOIN users u ON u.guru_id=g.id WHERE g.status='Aktif' OR u.id IS NOT NULL ORDER BY g.nama")->fetchAll();
-$students = $pdo->query("SELECT id,nis,nama FROM siswa WHERE status='Aktif' ORDER BY nama")->fetchAll();
-$availableStudents = $pdo->query("SELECT s.id,s.nis,s.nama FROM siswa s LEFT JOIN users u ON u.siswa_id=s.id WHERE s.status='Aktif' AND u.id IS NULL ORDER BY s.nama")->fetchAll();
-$classOptions = $pdo->query('SELECT id,nama_kelas FROM kelas ORDER BY nama_kelas')->fetchAll();
+
+$students = $pdo->query(
+    "SELECT id,nis,nama
+    FROM siswa
+    WHERE status='Aktif'
+    ORDER BY nama"
+)->fetchAll();
+
+$classOptions = $pdo->query(
+    'SELECT id,nama_kelas
+    FROM kelas
+    ORDER BY nama_kelas'
+)->fetchAll();
+
 $newPhoto = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
@@ -27,35 +61,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if ($action === 'create') {
             $name = trim((string)($_POST['nama_lengkap'] ?? ''));
+            $email = trim((string)($_POST['email'] ?? ''));
+            $phone = trim((string)($_POST['telepon'] ?? ''));
             $username = trim((string)($_POST['username'] ?? ''));
             $password = (string)($_POST['password'] ?? '');
             $passwordConfirmation = (string)($_POST['password_confirmation'] ?? '');
             $role = (string)($_POST['role'] ?? '');
-            $profileId = (int)($_POST[$role === 'guru' ? 'guru_id' : 'siswa_id'] ?? 0);
             if ($username === '' || strlen($username) > 60 || strlen($password) < 10 || !isset($createRoles[$role])) {
                 throw new InvalidArgumentException('Username dan peran yang diizinkan wajib diisi; password minimal 10 karakter. Super Admin hanya dibuat saat instalasi.');
             }
+
             if ($password !== $passwordConfirmation) throw new InvalidArgumentException('Konfirmasi password tidak sama.');
-            $guruId = $role === 'guru' ? $profileId : null;
-            $siswaId = $role === 'siswa' ? $profileId : null;
-            if ($role === 'guru' || $role === 'siswa') {
-                if ($profileId < 1) throw new InvalidArgumentException('Pilih data profil yang akan ditautkan ke akun ini.');
-                $check = $pdo->prepare($role === 'guru' ? "SELECT id,nama,nip FROM guru WHERE id=? AND status='Aktif'" : "SELECT id,nama,nis FROM siswa WHERE id=? AND status='Aktif'");
-                $check->execute([$profileId]);
+            if (mb_strlen($email) > 180 || ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL))) throw new InvalidArgumentException('Alamat email tidak valid atau melebihi 180 karakter.');
+            if (mb_strlen($phone) > 30) throw new InvalidArgumentException('Nomor telepon maksimal 30 karakter.');
+            $guruId = null;
+            $siswaId = null;
+            if ($role === 'guru') {
+                $check = $pdo->prepare("SELECT id,nama,nip FROM guru WHERE nip=? AND status='Aktif' LIMIT 1");
+                $check->execute([$username]);
                 $profile = $check->fetch();
-                if (!$profile) throw new InvalidArgumentException('Profil yang dipilih tidak ditemukan atau tidak aktif.');
-                if ($role === 'guru') {
+                if ($profile) {
+                    $guruId = (int)$profile['id'];
+                    $linkCheck = $pdo->prepare('SELECT id FROM users WHERE guru_id=? LIMIT 1');
+                    $linkCheck->execute([$guruId]);
+                    if ($linkCheck->fetchColumn()) throw new InvalidArgumentException('Profil Guru dengan NIP tersebut sudah ditautkan ke akun lain.');
                     $name = (string)$profile['nama'];
-                    if (!empty($profile['nip']) && $username !== (string)$profile['nip']) throw new InvalidArgumentException('Username login akun Guru harus sama dengan NIP pada data profil.');
-                } else {
-                    $name = (string)$profile['nama'];
-                    if ($username !== (string)$profile['nis']) throw new InvalidArgumentException('Username login akun Siswa harus sama dengan NIS pada data profil.');
                 }
-                $linkCheck = $pdo->prepare('SELECT id FROM users WHERE ' . ($role === 'guru' ? 'guru_id' : 'siswa_id') . '=? LIMIT 1');
-                $linkCheck->execute([$profileId]);
-                if ($linkCheck->fetchColumn()) throw new InvalidArgumentException('Profil ini sudah ditautkan ke akun lain.');
+            } elseif ($role === 'siswa') {
+                $check = $pdo->prepare("SELECT id,nama,nis FROM siswa WHERE nis=? AND status='Aktif' LIMIT 1");
+                $check->execute([$username]);
+                $profile = $check->fetch();
+                if (!$profile) throw new InvalidArgumentException('NIS tidak cocok dengan data siswa aktif. Tambahkan atau aktifkan data siswa terlebih dahulu.');
+                $siswaId = (int)$profile['id'];
+                $linkCheck = $pdo->prepare('SELECT id FROM users WHERE siswa_id=? LIMIT 1');
+                $linkCheck->execute([$siswaId]);
+                if ($linkCheck->fetchColumn()) throw new InvalidArgumentException('Profil siswa dengan NIS tersebut sudah ditautkan ke akun lain.');
+                $name = (string)$profile['nama'];
             }
-            if ($name === '' || strlen($name) > 120) throw new InvalidArgumentException('Nama lengkap pada profil yang ditautkan tidak valid.');
+            if ($name === '' || mb_strlen($name) > 120) throw new InvalidArgumentException('Nama lengkap wajib diisi dan maksimal 120 karakter.');
             $usernameCheck = $pdo->prepare('SELECT id FROM users WHERE username=? LIMIT 1');
             $usernameCheck->execute([$username]);
             if ($usernameCheck->fetchColumn()) throw new InvalidArgumentException('Username tersebut sudah digunakan. Coba username lain, misalnya tambahkan angka yang mudah Anda ingat.');
@@ -63,9 +106,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 [$newPhoto, $photoError] = store_user_photo($_FILES['foto']);
                 if ($photoError) throw new InvalidArgumentException($photoError);
             }
+            $contactData = [];
+            if ($phone !== '') {
+                if (!$biodataReady || !db_has_column($pdo, 'biodata_pengguna', 'telepon')) throw new InvalidArgumentException('Kolom telepon belum siap. Jalankan migrasi biodata sebelum membuat akun dengan nomor telepon.');
+                $contactData['telepon'] = $phone;
+            }
+            if ($email !== '') {
+                $emailCandidates = $role === 'siswa' ? ['email', 'email_pribadi'] : ['email_pribadi', 'email'];
+                $emailColumn = null;
+                if ($biodataReady) foreach ($emailCandidates as $candidate) if (db_has_column($pdo, 'biodata_pengguna', $candidate)) {
+                    $emailColumn = $candidate;
+                    break;
+                }
+                if ($emailColumn === null) throw new InvalidArgumentException('Kolom email biodata belum siap. Jalankan migrasi biodata sebelum membuat akun dengan email.');
+                $contactData[$emailColumn] = $email;
+            }
+            $pdo->beginTransaction();
             $stmt = $pdo->prepare('INSERT INTO users (username,password_hash,nama_lengkap,role,aktif,guru_id,siswa_id,foto_path,password_must_change) VALUES (?,?,?,?,1,?,?,?,1)');
             $stmt->execute([$username, password_hash($password, PASSWORD_DEFAULT), $name, $role, $guruId, $siswaId, $newPhoto]);
             $userId = (int)$pdo->lastInsertId();
+            if ($contactData) {
+                $contactColumns = array_keys($contactData);
+                $insertColumns = array_merge(['user_id'], $contactColumns);
+                $updates = array_map(static fn(string $column): string => "`{$column}`=VALUES(`{$column}`)", $contactColumns);
+                $contactStmt = $pdo->prepare('INSERT INTO biodata_pengguna (`' . implode('`,`', $insertColumns) . '`) VALUES (' . implode(',', array_fill(0, count($insertColumns), '?')) . ') ON DUPLICATE KEY UPDATE ' . implode(',', $updates));
+                $contactStmt->execute(array_merge([$userId], array_values($contactData)));
+            }
+            $pdo->commit();
             record_activity($pdo, 'buat pengguna', 'users', $userId, $role);
             $success = 'Akun pengguna berhasil dibuat.';
         } elseif ($action === 'update') {
@@ -90,10 +157,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($userId === (int)$_SESSION['user_id'] && ($active !== '1' || $role !== 'admin')) {
                 throw new InvalidArgumentException('Akun administrator yang sedang digunakan tidak dapat dinonaktifkan atau diturunkan perannya sendiri.');
             }
+
             if ($old['role'] === 'admin' && (int)$old['aktif'] === 1 && ($active !== '1' || $role !== 'admin')) {
                 $admins = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='admin' AND aktif=1")->fetchColumn();
                 if ($admins <= 1) throw new InvalidArgumentException('Minimal harus ada satu akun administrator aktif.');
             }
+
             $guruId = $role === 'guru' ? $profileId : null;
             $siswaId = $role === 'siswa' ? $profileId : null;
             if ($role === 'guru' || $role === 'siswa') {
@@ -138,6 +207,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             record_activity($pdo, 'ubah pengguna', 'users', $userId, $role);
             $success = 'Akun pengguna berhasil diperbarui.';
+        } elseif ($action === 'delete') {
+            $userId = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT) ?: 0;
+            if ($userId < 1 || $userId === (int)$_SESSION['user_id']) throw new InvalidArgumentException('Akun yang sedang digunakan atau ID tidak valid tidak dapat dihapus.');
+            $pdo->beginTransaction();
+            $accountStmt = $pdo->prepare('SELECT id,role,nama_lengkap,foto_path FROM users WHERE id=? LIMIT 1 FOR UPDATE');
+            $accountStmt->execute([$userId]);
+            $account = $accountStmt->fetch();
+            if (!$account) throw new InvalidArgumentException('Akun yang akan dihapus tidak ditemukan.');
+            if ($account['role'] === 'admin') {
+                $activeAdmins = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='admin' AND aktif=1")->fetchColumn();
+                if ($activeAdmins <= 1) throw new InvalidArgumentException('Akun Super Admin aktif terakhir tidak dapat dihapus. Buat akun admin pengganti terlebih dahulu.');
+            }
+            $deleteStmt = $pdo->prepare('DELETE FROM users WHERE id=?');
+            $deleteStmt->execute([$userId]);
+            record_activity($pdo, 'hapus pengguna', 'users', $userId, (string)$account['role']);
+            $pdo->commit();
+            if (!empty($account['foto_path'])) remove_user_photo($account['foto_path']);
+            $success = 'Akun ' . (string)$account['nama_lengkap'] . ' berhasil dihapus.';
         } elseif ($action === 'toggle_active') {
             $userId = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT) ?: 0;
             $active = (string)($_POST['aktif'] ?? '');
@@ -289,8 +376,15 @@ require __DIR__ . '/includes/header.php';
 <div class="row g-3 mb-4">
     <?php foreach ([['Semua akun', (int)($stats['total'] ?? 0), '', 'bi-people'], ['Aktif', (int)($stats['active_count'] ?? 0), 'status=1', 'bi-person-check'], ['Nonaktif', (int)($stats['inactive_count'] ?? 0), 'status=0', 'bi-person-x'], ['Profil belum tertaut', (int)($stats['unlinked_count'] ?? 0), 'profil=unlinked', 'bi-link-45deg'], ['Perlu ganti password', (int)($stats['must_change_count'] ?? 0), 'password=change', 'bi-key'], ['Belum pernah login', (int)($stats['never_login_count'] ?? 0), 'login=never', 'bi-clock']] as [$label, $value, $quick, $icon]): ?>
         <div class="col-6 col-lg-4 col-xxl-2"><a class="card p-3 h-100 text-decoration-none user-stat-card" href="users.php<?= $quick !== '' ? '?' . e($quick) : '' ?>">
-                <div class="d-flex justify-content-between align-items-center"><span class="small text-secondary"><?= e($label) ?></span><i class="bi <?= e($icon) ?> text-primary"></i></div><strong class="fs-3 mt-2"><?= number_format($value, 0, ',', '.') ?></strong>
-            </a></div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="small text-secondary">
+                        <?= e($label) ?>
+                    </span>
+                    <i class="bi <?= e($icon) ?> text-primary"></i>
+                </div>
+                <strong class="fs-3 mt-2"><?= number_format($value, 0, ',', '.') ?></strong>
+            </a>
+        </div>
     <?php endforeach; ?>
 </div>
 <div class="row g-3 mb-4" aria-label="Ringkasan akun guru">
@@ -350,7 +444,7 @@ require __DIR__ . '/includes/header.php';
                 <li><strong>Alur Operator:</strong> dapat memeriksa biodata akun Siswa/Guru/Kepala Sekolah dan menerbitkan password sementara untuk peran tersebut. Operator tidak membuat akun, mengubah role, atau mengatur akun Operator/Super Admin.</li>
                 <li><strong>Persetujuan:</strong> setelah migrasi biodata aktif, akun non-admin hanya dapat membuka dashboard setelah biodata disetujui. Akun yang menunggu atau diminta memperbaiki akan diarahkan ke halaman biodata.</li>
                 <li><strong>Siklus akun Guru:</strong> perubahan nama pada Data Guru ikut memperbarui nama akun. Jika profil Guru dinonaktifkan, akun tertaut ikut dinonaktifkan. Setelah profil diaktifkan kembali, Super Admin perlu memeriksa lalu mengaktifkan akunnya secara manual.</li>
-                <li><strong>Belum tersedia:</strong> kolom email akun SIMS, notifikasi email aktivasi, dan pemulihan password melalui email. Reset Operator saat ini menghasilkan password sementara yang harus disampaikan secara pribadi.</li>
+                <li><strong>Kontak akun:</strong> email dan nomor telepon disimpan pada biodata akun. Notifikasi email aktivasi dan pemulihan password melalui email belum tersedia. Reset Operator saat ini menghasilkan password sementara yang harus disampaikan secara pribadi.</li>
                 <li><strong>Peran Staf:</strong> belum menjadi peran tersendiri. Tetapkan tugas serta batas aksesnya terlebih dahulu; jangan menyamakan Staf dengan Operator tanpa keputusan sekolah.</li>
                 <li><strong>Prioritas lanjutan:</strong> integrasi email terverifikasi dan tautan pemulihan sekali pakai dengan masa berlaku, serta uji hak akses tiap peran pada staging sebelum penggunaan produksi.</li>
             </ul>
@@ -398,18 +492,18 @@ require __DIR__ . '/includes/header.php';
                     <div class="col-auto"><button class="btn btn-outline-primary">Terapkan status biodata</button></div>
                 </form><?php endif; ?>
             <div class="modal fade user-create-modal" id="buat-akun" tabindex="-1" aria-labelledby="createAccountTitle" aria-hidden="true">
-                <div class="modal-dialog">
+                <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                     <div class="modal-content">
                         <form method="post" enctype="multipart/form-data" class="user-account-form" id="createUserForm">
                             <div class="modal-header">
                                 <div>
                                     <h2 class="modal-title fs-5" id="createAccountTitle">Tambah Akun Pengguna</h2>
-                                    <p class="small text-secondary mb-0">Buat akun login dan tautkan profil sekolahnya.</p>
+                                    <p class="small text-secondary mb-0">Buat akun login; pengguna dapat melengkapi biodata setelah masuk.</p>
                                 </div>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
                             </div>
                             <div class="modal-body">
-                                <?php if ($error !== ''): ?><div class="alert alert-danger" role="alert"><?= e($error) ?></div><?php endif; ?>
+                                <?php if ($error !== ''): ?><div class="alert alert-danger user-create-error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i><span><?= e($error) ?></span></div><?php endif; ?>
                                 <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="create">
                                 <div class="mb-3">
                                     <label class="form-label" for="newPhoto">Foto Profil <span class="text-secondary fw-normal">(opsional)</span></label>
@@ -417,7 +511,11 @@ require __DIR__ . '/includes/header.php';
                                     <input class="visually-hidden" id="newPhoto" type="file" name="foto" accept="image/jpeg,image/png,image/webp">
                                 </div>
                                 <div class="mb-3"><label class="form-label" for="newFullName">Nama Lengkap</label><input class="form-control account-name-input" id="newFullName" name="nama_lengkap" value="<?= e($_POST['nama_lengkap'] ?? '') ?>" maxlength="120" autocomplete="name" required>
-                                    <div class="form-text account-name-help">Untuk akun Guru, nama mengikuti profil Guru yang ditautkan.</div>
+                                    <div class="form-text account-name-help">Jika profil Guru atau Siswa yang cocok ditemukan, nama akan mengikuti data profil tersebut.</div>
+                                </div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-sm-6"><label class="form-label" for="newEmail">Email <span class="text-secondary fw-normal">(opsional)</span></label><input class="form-control" id="newEmail" name="email" type="email" maxlength="180" value="<?= e($_POST['email'] ?? '') ?>" autocomplete="email"></div>
+                                    <div class="col-sm-6"><label class="form-label" for="newPhone">Nomor Telepon <span class="text-secondary fw-normal">(opsional)</span></label><input class="form-control" id="newPhone" name="telepon" type="tel" maxlength="30" value="<?= e($_POST['telepon'] ?? '') ?>" autocomplete="tel"></div>
                                 </div>
                                 <div class="mb-3"><label class="form-label" for="newUsername"><span id="newUsernameLabel">Username / NIS / NIP / ID Operator</span></label><input class="form-control" id="newUsername" name="username" value="<?= e($_POST['username'] ?? '') ?>" maxlength="60" autocomplete="username" placeholder="Masukkan identitas login yang unik" required>
                                     <div class="form-text" id="newUsernameHelp">Untuk Siswa gunakan NIS, Guru/Kepala Sekolah gunakan NIP, dan Operator gunakan ID Operator. Nilai ini menjadi username login; NIS/NIP tidak disimpan sebagai password.</div>
@@ -427,17 +525,6 @@ require __DIR__ . '/includes/header.php';
                                     <div class="col-sm-6"><label class="form-label">Status Akun</label>
                                         <div class="form-control bg-body-tertiary"><span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i>Aktif</span><span class="small text-secondary ms-2">saat dibuat</span></div>
                                     </div>
-                                </div>
-                                <div class="mb-3 profile-link-guru"><label class="form-label" for="newGuruId">Profil Guru</label><select class="form-select" id="newGuruId" name="guru_id">
-                                        <option value="">Pilih guru aktif yang belum memiliki akun</option><?php $requestedGuruId = (int)($_POST['guru_id'] ?? $_GET['guru_id'] ?? 0);
-                                                                                                            foreach ($teachers as $teacher): ?><option value="<?= (int)$teacher['id'] ?>" data-name="<?= e($teacher['nama']) ?>" <?= !empty($teacher['linked_user_id']) ? 'disabled' : '' ?> <?= $requestedGuruId === (int)$teacher['id'] ? 'selected' : '' ?>><?= e($teacher['nama']) ?><?= !empty($teacher['nip']) ? ' · NIP ' . $teacher['nip'] : '' ?><?= !empty($teacher['linked_user_id']) ? ' · sudah tertaut ke ' . $teacher['linked_username'] : '' ?></option><?php endforeach; ?>
-                                    </select>
-                                    <div class="form-text">Pilih profil aktif yang belum memiliki akun. Satu profil hanya dapat ditautkan ke satu akun.</div>
-                                </div>
-                                <div class="mb-3 profile-link-siswa"><label class="form-label" for="newStudentId">Profil Siswa</label><select class="form-select" id="newStudentId" name="siswa_id" aria-describedby="studentProfileHelp">
-                                        <option value="">Pilih siswa aktif yang belum tertaut</option><?php foreach ($availableStudents as $student): ?><option value="<?= (int)$student['id'] ?>" <?= (int)($_POST['siswa_id'] ?? 0) === (int)$student['id'] ? 'selected' : '' ?>><?= e($student['nama']) ?> · <?= e($student['nis']) ?></option><?php endforeach; ?>
-                                    </select>
-                                    <div class="form-text" id="studentProfileHelp">Pilih data induk siswa yang akan dipakai untuk akun ini. Satu profil hanya dapat digunakan oleh satu akun.</div><?php if (!$availableStudents): ?><div class="alert alert-warning py-2 mt-2 mb-0" id="studentProfileEmpty" role="status"><strong>Tidak ada profil siswa aktif yang tersedia untuk ditautkan.</strong> Tambahkan atau aktifkan data siswa melalui <a href="index.php?module=siswa" target="_blank" rel="noopener">Data Siswa</a>. Jika profilnya sudah dipakai akun lain, buka akun tersebut pada daftar pengguna.</div><?php endif; ?>
                                 </div>
                                 <div class="mb-3"><label class="form-label" for="newPassword">Kata Sandi Awal</label><input class="form-control" id="newPassword" type="password" name="password" minlength="10" autocomplete="new-password" placeholder="Minimal 10 karakter" required>
                                     <div class="form-text">Gunakan password awal yang kuat. Pengguna diminta mengganti password setelah login pertama.</div>
@@ -450,7 +537,7 @@ require __DIR__ . '/includes/header.php';
                 </div>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle">
+                <table class="table table-hover align-middle users-table">
                     <thead>
                         <tr>
                             <th>Akun</th>
@@ -468,8 +555,13 @@ require __DIR__ . '/includes/header.php';
                                 <td><?= e($roles[$user['role']] ?? $user['role']) ?></td>
                                 <td><?php $biodataLabels = ['belum_lengkap' => 'Belum lengkap', 'menunggu_verifikasi' => 'Menunggu verifikasi', 'terverifikasi' => 'Disetujui', 'perlu_perbaikan' => 'Perlu perbaikan', 'ditolak' => 'Ditolak']; ?><span class="badge text-bg-<?= $user['biodata_status'] === 'terverifikasi' ? 'success' : ($user['biodata_status'] === 'menunggu_verifikasi' ? 'warning' : (in_array($user['biodata_status'], ['perlu_perbaikan', 'ditolak'], true) ? 'danger' : 'secondary')) ?>"><?= $user['biodata_status'] === 'belum_aktif' ? 'Belum aktif' : e($biodataLabels[$user['biodata_status']] ?? 'Belum lengkap') ?></span><?php if ($biodataReady): ?><br><a class="small" href="biodata.php?user=<?= (int)$user['id'] ?>">Periksa biodata</a><?php endif; ?></td>
                                 <td><span class="badge text-bg-<?= (int)$user['aktif'] === 1 ? 'success' : 'secondary' ?>"><?= (int)$user['aktif'] === 1 ? 'Aktif' : 'Nonaktif' ?></span><?php if ((int)$user['password_must_change'] === 1): ?><br><span class="badge text-bg-warning mt-1">Ganti password</span><?php endif; ?><br><small class="text-secondary">Login: <?= e($user['last_login_at'] ?: 'Belum pernah') ?></small></td>
-                                <td>
-                                    <form method="post" class="d-inline-block mb-2" onsubmit="return confirm('<?= (int)$user['aktif'] === 1 ? 'Nonaktifkan' : 'Aktifkan' ?> akun ini?')">
+                                <td class="user-actions-cell"><div class="user-account-actions">
+                                    <div class="user-account-actions-primary">
+                                        <?php if ($biodataReady): ?><a class="btn btn-sm btn-outline-info" href="biodata.php?user=<?= (int)$user['id'] ?>&preview=1" title="Lihat profil layar penuh"><i class="bi bi-eye me-1" aria-hidden="true"></i>Lihat</a><?php endif; ?>
+                                        <button class="btn btn-sm btn-outline-primary user-account-edit-trigger" type="button" data-bs-toggle="modal" data-bs-target="#edit-user-<?= (int)$user['id'] ?>"><i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Edit</button>
+                                        <?php if ((int)$user['id'] !== (int)$_SESSION['user_id']): ?><form method="post" class="d-inline user-action-form" onsubmit="return confirm('Hapus akun <?= e($user['nama_lengkap']) ?>? Riwayat terkait dapat tetap tersimpan tanpa nama akun.');"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$user['id'] ?>"><button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1" aria-hidden="true"></i>Hapus</button></form><?php endif; ?>
+                                    </div>
+                                    <form method="post" class="d-inline-block mb-2 user-action-form user-account-toggle" onsubmit="return confirm('<?= (int)$user['aktif'] === 1 ? 'Nonaktifkan' : 'Aktifkan' ?> akun ini?')">
                                         <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
                                         <input type="hidden" name="action" value="toggle_active">
                                         <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
@@ -478,9 +570,14 @@ require __DIR__ . '/includes/header.php';
                                             <i class="bi <?= (int)$user['aktif'] === 1 ? 'bi-person-x' : 'bi-person-check' ?> me-1" aria-hidden="true"></i><?= (int)$user['aktif'] === 1 ? 'Nonaktifkan' : 'Aktifkan' ?>
                                         </button>
                                     </form>
-                                    <details>
-                                        <summary class="btn btn-sm btn-outline-primary">Edit</summary>
-                                        <form method="post" enctype="multipart/form-data" class="border rounded p-3 mt-2 user-account-form"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="update"><input type="hidden" name="id" value="<?= (int)$user['id'] ?>"><label class="form-label">Nama</label><input class="form-control mb-2 account-name-input" name="nama_lengkap" value="<?= e($user['nama_lengkap']) ?>" required>
+                                    <div class="modal fade user-account-edit-modal" id="edit-user-<?= (int)$user['id'] ?>" tabindex="-1" aria-labelledby="edit-user-title-<?= (int)$user['id'] ?>" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+                                            <div class="modal-content">
+                                                <div class="modal-header user-account-modal-header">
+                                                    <div><span class="user-account-modal-kicker">PENGATURAN AKUN</span><h2 class="modal-title fs-5" id="edit-user-title-<?= (int)$user['id'] ?>">Edit akun pengguna</h2><p class="small text-secondary mb-0">Perbarui identitas, profil tertaut, atau status akun.</p></div>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                                                </div>
+                                                <form method="post" enctype="multipart/form-data" class="user-account-form"><div class="modal-body"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="update"><input type="hidden" name="id" value="<?= (int)$user['id'] ?>"><label class="form-label">Nama</label><input class="form-control mb-2 account-name-input" name="nama_lengkap" value="<?= e($user['nama_lengkap']) ?>" required>
                                             <div class="form-text account-name-help mb-2">Untuk akun Guru, nama mengikuti profil Guru yang ditautkan.</div><label class="form-label">Username</label><input class="form-control mb-2" name="username" value="<?= e($user['username']) ?>" required><label class="form-label">Peran</label><select class="form-select mb-2 user-role-select" name="role"><?php foreach ($roles as $key => $label): ?><option value="<?= e($key) ?>" <?= $user['role'] === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
                                             <div class="profile-link-guru mb-2"><label class="form-label">Data Guru Tertaut</label><select class="form-select" name="guru_id">
                                                     <option value="">Pilih guru aktif</option><?php foreach ($teachers as $teacher): ?><option value="<?= (int)$teacher['id'] ?>" data-name="<?= e($teacher['nama']) ?>" <?= (int)$user['guru_id'] === (int)$teacher['id'] ? 'selected' : '' ?> <?= !empty($teacher['linked_user_id']) && (int)$teacher['linked_user_id'] !== (int)$user['id'] ? 'disabled' : '' ?>><?= e($teacher['nama']) ?><?= !empty($teacher['nip']) ? ' · NIP ' . $teacher['nip'] : '' ?><?= $teacher['status'] !== 'Aktif' ? ' · nonaktif' : '' ?><?= !empty($teacher['linked_username']) && (int)$teacher['linked_user_id'] !== (int)$user['id'] ? ' · sudah tertaut' : '' ?></option><?php endforeach; ?>
@@ -495,10 +592,12 @@ require __DIR__ . '/includes/header.php';
                                             <div class="form-text mb-2">Jika direset, pengguna wajib mengganti password setelah login berikutnya.</div><label class="form-label">Status</label><select class="form-select mb-3" name="aktif">
                                                 <option value="1" <?= (int)$user['aktif'] === 1 ? ' selected' : '' ?>>Aktif</option>
                                                 <option value="0" <?= (int)$user['aktif'] === 0 ? ' selected' : '' ?>>Nonaktif</option>
-                                            </select><button class="btn btn-sm btn-primary">Simpan</button>
-                                        </form>
-                                    </details>
-                                </td>
+                                            </select></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Batal</button><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Simpan perubahan</button></div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div></td>
                             </tr><?php endforeach; ?>
                         <?php if (!$users): ?><tr>
                                 <td colspan="6" class="text-center text-secondary">Belum ada akun.</td>
@@ -513,6 +612,14 @@ require __DIR__ . '/includes/header.php';
     </div>
 </div>
 <script>
+    document.querySelectorAll('.user-account-edit-modal').forEach(modal => {
+        document.body.appendChild(modal);
+        modal.addEventListener('shown.bs.modal', () => {
+            modal.querySelector('.account-name-input')?.focus({
+                preventScroll: true
+            });
+        });
+    });
     document.querySelectorAll('.user-account-form').forEach(form => {
         const role = form.querySelector('.user-role-select');
         const name = form.querySelector('.account-name-input');
@@ -538,9 +645,17 @@ require __DIR__ . '/includes/header.php';
             });
             if (name) {
                 const linked = role.value === 'guru';
-                name.readOnly = linked;
+                name.readOnly = linked && form.id !== 'createUserForm';
                 if (linked && guru?.selectedOptions[0]?.dataset.name) name.value = guru.selectedOptions[0].dataset.name;
-                if (nameHelp) nameHelp.hidden = !linked
+                if (nameHelp) {
+                    const profileBased = role.value === 'guru' || role.value === 'siswa';
+                    nameHelp.hidden = !profileBased;
+                    if (form.id === 'createUserForm' && profileBased) {
+                        nameHelp.textContent = role.value === 'guru'
+                            ? 'Jika NIP cocok dengan profil Guru aktif, akun ditautkan otomatis. Jika belum ada, pengguna dapat melengkapi biodata setelah masuk.'
+                            : 'Jika NIS cocok dengan profil Siswa aktif, akun ditautkan otomatis. Jika belum ada, pengguna dapat melengkapi biodata setelah masuk.';
+                    }
+                }
             }
         };
         role.addEventListener('change', sync);
@@ -551,11 +666,13 @@ require __DIR__ . '/includes/header.php';
     const newUserRole = document.getElementById('newRole');
     const identityLabel = document.getElementById('newUsernameLabel');
     const identityHelp = document.getElementById('newUsernameHelp');
+    const identityInput = document.getElementById('newUsername');
     const syncIdentity = () => {
         if (!newUserRole || !identityLabel) return;
         const role = newUserRole.value;
         identityLabel.textContent = role === 'siswa' ? 'NIS (Username Login)' : (role === 'guru' || role === 'kepala_sekolah' ? 'NIP (Username Login)' : (role === 'operator' ? 'ID Operator (Username Login)' : 'Username / NIS / NIP / ID Operator'));
-        if (identityHelp) identityHelp.textContent = role === 'siswa' ? 'Masukkan NIS yang sesuai dengan profil siswa tertaut. NIS digunakan sebagai username; password tetap dibuat terpisah.' : (role === 'guru' || role === 'kepala_sekolah' ? 'Masukkan NIP yang sesuai dengan data kepegawaian. NIP digunakan sebagai username; password tetap dibuat terpisah.' : (role === 'operator' ? 'Masukkan ID Operator yang unik. ID ini digunakan sebagai username; password tetap dibuat terpisah.' : 'Gunakan identitas login unik sesuai peran akun.'))
+        if (identityHelp) identityHelp.textContent = role === 'siswa' ? 'Gunakan NIS sebagai ID login. Jika profil siswa belum ada, akun tetap dapat dibuat dan biodata diisi setelah pengguna masuk.' : (role === 'guru' ? 'Gunakan NIP sebagai ID login. Jika profil Guru aktif belum ada, akun tetap dapat dibuat dan biodata dilengkapi setelah pengguna masuk.' : (role === 'kepala_sekolah' ? 'Masukkan NIP sebagai ID login.' : (role === 'operator' ? 'Masukkan ID Operator yang unik sebagai username login.' : 'Gunakan identitas login unik sesuai peran akun.')));
+        if (identityInput) identityInput.placeholder = role === 'guru' || role === 'kepala_sekolah' ? 'Masukkan NIP' : (role === 'siswa' ? 'Masukkan NIS' : 'Masukkan identitas login yang unik');
     };
     newUserRole?.addEventListener('change', syncIdentity);
     syncIdentity();

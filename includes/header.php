@@ -7,6 +7,15 @@ $navigationGroups = $mustChangePassword
     : require __DIR__ . '/navigation.php';
 $activeModule = (string)($_GET['module'] ?? '');
 $currentPage = basename((string)($_SERVER['PHP_SELF'] ?? 'index.php'));
+$pendingStudentBiodata = current_role() === 'siswa' && (string)($_SESSION['biodata_status'] ?? 'terverifikasi') !== 'terverifikasi' && !$mustChangePassword;
+if ($pendingStudentBiodata) {
+    $navigationGroups = [
+        'Biodata & Akun' => [
+            ['label' => 'Dashboard Biodata', 'icon' => 'bi-grid-1x2-fill', 'href' => 'student.php'],
+            ['label' => 'Perbarui Biodata', 'icon' => 'bi-person-vcard', 'href' => 'biodata.php'],
+        ],
+    ];
+}
 $displayPreferences = is_logged_in() ? user_display_preferences($pdo) : normalize_user_display_preferences([]);
 $dashboardView = (string)($_GET['view'] ?? 'dashboard');
 $isDashboardHome = ($currentPage === 'index.php' && $activeModule === '' && in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true))
@@ -43,6 +52,9 @@ if (is_logged_in() && !$mustChangePassword && can_view_module('notifikasi')) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="assets/style.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/style.css'), 0, 12)) ?>" rel="stylesheet">
+    <?php if ($currentPage === 'users.php'): ?>
+        <link href="assets/users.css?v=<?= (int)filemtime(__DIR__ . '/../assets/users.css') ?>" rel="stylesheet">
+    <?php endif; ?>
     <?php if ($currentPage === 'settings.php'): ?>
         <link href="assets/settings.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/settings.css'), 0, 12)) ?>" rel="stylesheet">
     <?php endif; ?>
@@ -58,6 +70,7 @@ if (is_logged_in() && !$mustChangePassword && can_view_module('notifikasi')) {
         <link href="assets/role-dashboards.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/role-dashboards.css'), 0, 12)) ?>" rel="stylesheet"><?php endif; ?>
     <?php if (in_array($currentPage, ['profile.php', 'biodata.php'], true)): ?>
         <link href="assets/account-biodata.css?v=<?= (int)filemtime(__DIR__ . '/../assets/account-biodata.css') ?>" rel="stylesheet"><?php endif; ?>
+    <link href="assets/ui-refinement.css?v=<?= e(substr(hash_file('sha256', __DIR__ . '/../assets/ui-refinement.css'), 0, 12)) ?>" rel="stylesheet">
 </head>
 
 <body<?= $isDashboardHome ? ' class="dashboard-navy-theme"' : '' ?> data-user-id="<?= (int) ($_SESSION['user_id'] ?? 0) ?>" data-preference-url="<?= e(app_url('settings.php?ajax=preferensi')) ?>">
@@ -71,7 +84,9 @@ if (is_logged_in() && !$mustChangePassword && can_view_module('notifikasi')) {
                     if (!$visibleItems) continue; ?>
                     <div class="nav-group-label"><?= e($group) ?></div>
                     <?php foreach ($visibleItems as $item): $href = $item['href'] ?? ('index.php?module=' . urlencode($item['module']));
-                        $active = isset($item['report']) ? ($currentPage === 'reports.php' && (string)($_GET['type'] ?? '') === $item['report']) : (isset($item['activeView']) ? ($currentPage === basename($item['href']) && (string)($_GET['view'] ?? 'dashboard') === $item['activeView']) : (isset($item['module']) ? ($activeModule === $item['module'] || (isset($item['href']) && $currentPage === basename($item['href']))) : $currentPage === basename($item['href']))); ?>
+                        $active = isset($item['portalSection'])
+                            ? ($activeModule === 'portal_admin' && (string)($_GET['portal_section'] ?? 'summary') === $item['portalSection'])
+                            : (isset($item['report']) ? ($currentPage === 'reports.php' && (string)($_GET['type'] ?? '') === $item['report']) : (isset($item['activeView']) ? ($currentPage === basename($item['href']) && (string)($_GET['view'] ?? 'dashboard') === $item['activeView']) : (isset($item['module']) ? ($activeModule === $item['module'] || (isset($item['href']) && $currentPage === basename($item['href']))) : $currentPage === basename($item['href'])))); ?>
                         <a class="sidebar-link<?= $active ? ' active' : '' ?>" href="<?= e($href) ?>"><i class="bi <?= e($item['icon']) ?>"></i><span><?= e($item['label']) ?></span></a>
                     <?php endforeach; ?>
                 <?php endforeach; ?>

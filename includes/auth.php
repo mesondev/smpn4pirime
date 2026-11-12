@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$username]);
         $user = $stmt->fetch();
 
-        if ($user && password_verify($password, $user['password_hash'])) {
+        if ($user && password_verify($password, $user['password_hash']) && is_valid_role((string)($user['role'] ?? ''))) {
             session_regenerate_id(true);
             unset($_SESSION['login_failures'], $_SESSION['login_locked_until']);
             $_SESSION['user_id'] = (int)$user['id'];

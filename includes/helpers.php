@@ -143,7 +143,7 @@ function require_login(): void
         $stmt = $pdo->prepare('SELECT username,nama_lengkap,role,aktif,guru_id,siswa_id,foto_path,password_must_change FROM users WHERE id=? LIMIT 1');
         $stmt->execute([(int)$_SESSION['user_id']]);
         $account = $stmt->fetch();
-        if (!$account || (int)$account['aktif'] !== 1) {
+        if (!$account || (int)$account['aktif'] !== 1 || !is_valid_role((string)($account['role'] ?? ''))) {
             $_SESSION = [];
             session_regenerate_id(true);
             redirect('login.php?inactive=1');
@@ -166,14 +166,20 @@ function require_login(): void
         if ((int)$schema->fetchColumn() === 1) {
             $approval = $pdo->prepare('SELECT status_verifikasi FROM biodata_pengguna WHERE user_id=?');
             $approval->execute([(int)$_SESSION['user_id']]);
-            $approved = $approval->fetchColumn() === 'terverifikasi';
+            $approvalStatus = (string)($approval->fetchColumn() ?: 'belum_lengkap');
+            $_SESSION['biodata_status'] = $approvalStatus;
+            $approved = $approvalStatus === 'terverifikasi';
             $approvalRequired = current_role() !== 'admin';
             if (current_role() === 'admin' && !$approved) {
                 $otherApprovedAdmin = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN biodata_pengguna b ON b.user_id=u.id WHERE u.role='admin' AND u.aktif=1 AND u.id<>? AND b.status_verifikasi='terverifikasi'");
                 $otherApprovedAdmin->execute([(int)$_SESSION['user_id']]);
                 $approvalRequired = (int)$otherApprovedAdmin->fetchColumn() > 0;
             }
-            if (!$approved && $approvalRequired) {
+            $pendingStudentDashboard = current_role() === 'siswa'
+                && $currentPage === 'student.php'
+                && (string)($_GET['view'] ?? 'dashboard') === 'dashboard'
+                && strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'GET';
+            if (!$approved && $approvalRequired && !$pendingStudentDashboard) {
                 if ($currentPage === 'profile.php' && !empty($_SESSION['password_must_change'])) return;
                 if ($currentPage === 'profile.php') redirect(app_url('biodata.php?menunggu=1'));
                 if (!in_array($currentPage, ['biodata.php', 'logout.php'], true)) redirect(app_url('biodata.php?menunggu=1'));
@@ -188,6 +194,10 @@ function current_user(): string
 function current_role(): string
 {
     return (string)($_SESSION['role'] ?? '');
+}
+function is_valid_role(string $role): bool
+{
+    return in_array($role, ['admin', 'operator', 'kepala_sekolah', 'guru', 'siswa'], true);
 }
 function role_label(?string $role = null): string
 {
@@ -285,11 +295,16 @@ function save_user_display_preferences(PDO $pdo, int $userId, array $preferences
 // Centralize read permissions so navigation visibility and route checks use the same policy.
 function can_view_module(string $module): bool
 {
+    if (!is_valid_role(current_role())) return false;
+    if (current_role() === 'admin') return true;
+    $dynamicPermission = dynamic_module_permission($module, 'view');
+    if ($dynamicPermission !== null) return $dynamicPermission;
     // Data kelas dan mapel dibatasi untuk pengelola serta Kepala Sekolah; Guru mengakses kelas tugasnya melalui dashboard Guru.
     if (in_array($module, ['kelas', 'mapel'], true)) {
         return in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true);
     }
     if ($module === 'moderasi_konten') return current_role() === 'admin';
+    if ($module === 'staf') return in_array(current_role(), ['admin', 'operator'], true);
     if ($module === 'notifikasi') {
         return in_array(current_role(), ['admin', 'operator', 'guru', 'siswa', 'kepala_sekolah'], true);
     }
@@ -316,13 +331,17 @@ function can_view_module(string $module): bool
 // Centralize write permissions separately from read access.
 function can_manage_module(string $module): bool
 {
+    if (!is_valid_role(current_role())) return false;
     if (current_role() === 'admin') {
         return true;
     }
+    $dynamicPermission = dynamic_module_permission($module, 'manage');
+    if ($dynamicPermission !== null) return $dynamicPermission;
     if (current_role() === 'operator') {
         return in_array($module, [
             'siswa',
             'guru',
+            'staf',
             'kelas',
             'mapel',
             // Operator harus dapat mengelola tahun ajaran agar kelas baru bisa ditautkan ke periode yang valid.
@@ -345,6 +364,33 @@ function can_manage_module(string $module): bool
     }
     return false;
 }
+/** Return null until the RBAC schema/permission is present; otherwise enforce the stored grant. */
+function dynamic_module_permission(string $module, string $action): ?bool
+{
+    static $cache = [];
+    if (!in_array($action, ['view', 'manage'], true) || !preg_match('/^[a-z0-9_]+$/', $module)) return null;
+    $role = current_role();
+    $cacheKey = $role . ':' . $module . ':' . $action;
+    if (array_key_exists($cacheKey, $cache)) return $cache[$cacheKey];
+    $pdo = $GLOBALS['pdo'] ?? null;
+    if (!$pdo instanceof PDO) return $cache[$cacheKey] = null;
+    try {
+        if (!db_has_column($pdo, 'roles', 'slug') || !db_has_column($pdo, 'permissions', 'module_key') || !db_has_column($pdo, 'role_permissions', 'granted')) {
+            return $cache[$cacheKey] = null;
+        }
+        $permission = $pdo->prepare('SELECT id FROM permissions WHERE module_key=? AND action_name=? LIMIT 1');
+        $permission->execute([$module, $action]);
+        $permissionId = $permission->fetchColumn();
+        if ($permissionId === false) return $cache[$cacheKey] = null;
+        $grant = $pdo->prepare('SELECT rp.granted FROM role_permissions rp JOIN roles r ON r.id=rp.role_id WHERE r.slug=? AND rp.permission_id=? LIMIT 1');
+        $grant->execute([$role, (int)$permissionId]);
+        $value = $grant->fetchColumn();
+        return $cache[$cacheKey] = $value === false ? false : (int)$value === 1;
+    } catch (PDOException $exception) {
+        app_log('warning', 'Dynamic permission lookup failed', ['module' => $module, 'action' => $action]);
+        return $cache[$cacheKey] = null;
+    }
+}
 function require_module_access(string $module, bool $write = false): void
 {
     $allowed = $write ? can_manage_module($module) : can_view_module($module);
@@ -353,7 +399,19 @@ function require_module_access(string $module, bool $write = false): void
         exit('Anda tidak memiliki izin untuk mengakses tindakan ini.');
     }
 }
-function record_activity(PDO $pdo, string $action, string $entity, ?int $recordId = null, ?string $detail = null): void
+function audit_safe_snapshot(?array $values): ?string
+{
+    if ($values === null) return null;
+    $safe = [];
+    foreach ($values as $key => $value) {
+        $field = (string)$key;
+        if (preg_match('/password|secret|token|cookie|authorization|credential|hash|email|phone|telepon|alamat|address|nama|username|nik|nis|siswa_id|guru_id|akta|dokumen|file|foto|photo|path|session|pesan|catatan|isi|jawaban|deskripsi|instruksi/i', $field)) continue;
+        if (!is_scalar($value) && $value !== null) continue;
+        $safe[$field] = is_string($value) ? (function_exists('mb_substr') ? mb_substr($value, 0, 1000) : substr($value, 0, 1000)) : $value;
+    }
+    return $safe ? json_encode($safe, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) : null;
+}
+function record_activity(PDO $pdo, string $action, string $entity, ?int $recordId = null, ?string $detail = null, ?array $oldValues = null, ?array $newValues = null): void
 {
     try {
         $stmt = $pdo->prepare('INSERT INTO log_aktivitas (user_id,aksi,entitas,record_id,detail) VALUES (?,?,?,?,?)');
@@ -361,6 +419,22 @@ function record_activity(PDO $pdo, string $action, string $entity, ?int $recordI
     } catch (PDOException $e) {
         // Pencatatan audit tidak boleh menggagalkan transaksi bisnis.
         app_log('warning', 'Activity log write failed', ['entity' => $entity]);
+    }
+    try {
+        if (!db_has_column($pdo, 'audit_logs', 'old_data')) return;
+        $audit = $pdo->prepare('INSERT INTO audit_logs (actor_user_id,action_name,module_key,record_id,old_data,new_data,ip_address,user_agent) VALUES (?,?,?,?,?,?,?,?)');
+        $audit->execute([
+            $_SESSION['user_id'] ?? null,
+            function_exists('mb_substr') ? mb_substr($action, 0, 80) : substr($action, 0, 80),
+            function_exists('mb_substr') ? mb_substr($entity, 0, 100) : substr($entity, 0, 100),
+            $recordId,
+            audit_safe_snapshot($oldValues),
+            audit_safe_snapshot($newValues),
+            filter_var($_SERVER['REMOTE_ADDR'] ?? null, FILTER_VALIDATE_IP) ? (string)$_SERVER['REMOTE_ADDR'] : null,
+            (function_exists('mb_substr') ? mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500) : substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500)) ?: null,
+        ]);
+    } catch (Throwable $exception) {
+        app_log('warning', 'Structured audit write failed', ['entity' => $entity]);
     }
 }
 function field_label(string $key): string

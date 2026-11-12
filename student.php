@@ -77,11 +77,26 @@ $rows = [];
 $weekdayNames = ['Monday' => 'Senin', 'Tuesday' => 'Selasa', 'Wednesday' => 'Rabu', 'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu', 'Sunday' => 'Minggu'];
 $todayName = $weekdayNames[date('l')] ?? 'Hari ini';
 $biodataStatus = null;
+$biodataReady = false;
+$studentBiodata = [];
 $biodataSchema = $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='biodata_pengguna'")->fetchColumn();
 if ((int)$biodataSchema === 1) {
-    $biodataStmt = $pdo->prepare('SELECT status_verifikasi FROM biodata_pengguna WHERE user_id=?');
+    $biodataReady = true;
+    $biodataStmt = $pdo->prepare('SELECT * FROM biodata_pengguna WHERE user_id=?');
     $biodataStmt->execute([(int)$_SESSION['user_id']]);
-    $biodataStatus = $biodataStmt->fetchColumn() ?: 'belum_lengkap';
+    $studentBiodata = $biodataStmt->fetch() ?: [];
+    $biodataStatus = (string)($studentBiodata['status_verifikasi'] ?? 'belum_lengkap');
+}
+$studentBiodataRequiredFields = ['telepon', 'alamat', 'tanggal_lahir', 'provinsi', 'kabupaten', 'distrik', 'kampung', 'nama_kontak_darurat', 'telepon_kontak_darurat', 'asal_sekolah'];
+$biodataRequiredTotal = count($studentBiodataRequiredFields);
+$biodataRequiredFilled = count(array_filter($studentBiodataRequiredFields, static fn(string $field): bool => trim((string)($studentBiodata[$field] ?? '')) !== ''));
+
+if ($view === 'dashboard' && $biodataReady && $biodataStatus !== 'terverifikasi') {
+    $pageTitle = 'Dashboard Biodata Siswa';
+    require __DIR__ . '/includes/header.php';
+    require __DIR__ . '/includes/student_pending_dashboard.php';
+    require __DIR__ . '/includes/footer.php';
+    exit;
 }
 
 $scheduleSql = "SELECT j.hari,j.jam_mulai,j.jam_selesai,m.nama_mapel,g.nama AS guru,j.ruang

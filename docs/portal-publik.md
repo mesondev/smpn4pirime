@@ -1,5 +1,7 @@
 # Pengelolaan layanan portal publik
 
+Menu **Layanan Publik → Portal Publik** pada dashboard Super Admin menjadi satu ruang kerja: ringkasan publikasi, pintasan profil sekolah/PPDB/pesan, daftar seluruh jenis konten, dan pratinjau langsung website tampil pada satu halaman responsif. Tombol **Kelola** membuka formulir modul lama yang sudah memiliki validasi dan kontrol akses; tabel, rute, dan data publik yang ada tetap dipertahankan. Navigasi dropdown serta halaman-halaman website publik tetap seperti sebelumnya.
+
 Fitur tambahan menggunakan database `sims_db` dan PHP Native yang sudah dipakai proyek. Tidak ada data sekolah yang direkayasa; konten hanya tampil setelah dimasukkan dan berstatus terbit.
 
 ## Menerapkan perubahan database
@@ -46,9 +48,11 @@ Tabel `portal_tautan_sosial` menerima `facebook`, `instagram`, `youtube`, `tikto
 
 Formulir pada halaman Kontak menyimpan pertanyaan umum di `pesan_kontak` dan isi pesan di `pesan_kontak_balasan`. Petugas dapat menindaklanjuti melalui menu **Layanan Publik → Pesan Masuk**. Pembatasan formulir, honeypot, token CSRF, validasi, dan jeda pengiriman membantu mengurangi kiriman otomatis.
 
+Penghitung publik mencatat perkiraan kunjungan per hari berdasarkan sesi browser, paling banyak satu hitungan per sesi setiap hari. Sistem hanya menyimpan tanggal dan jumlah agregat pada `portal_pengunjung_harian`, tanpa menyimpan alamat IP. Jumlah harian bukan jumlah orang unik yang dapat dipastikan; browser berbeda dan kunjungan pada hari lain dapat dihitung lagi. Migrasi: `2026_11_04_public_visitors.sql`.
+
 ## Tampilan, aksesibilitas, dan pemantauan
 
-Slideshow beranda menyediakan tombol **Jeda/Lanjutkan** dan menghormati pengaturan reduced motion pada perangkat. Paragraf, daftar, dan tabel ditampilkan utuh secara bawaan; hanya bagian yang secara eksplisit ditandai untuk ringkasan yang dapat dilipat.
+Slideshow beranda berpindah otomatis. Tombol panah dan tombol jeda visual dihapus; ketuk area kiri untuk slide sebelumnya dan area kanan untuk slide berikutnya. Tautan di dalam slide dan indikator bulat tetap berfungsi. Keyboard panah kiri/kanan juga dapat digunakan saat sorotan difokuskan. Slideshow menghormati pengaturan reduced motion dan menghentikan timer saat tab tersembunyi. Paragraf, daftar, dan tabel ditampilkan utuh secara bawaan; hanya bagian yang secara eksplisit ditandai untuk ringkasan yang dapat dilipat.
 
 Kesalahan query pada portal dicatat di log aplikasi lokal tanpa mengirimkan rincian database kepada pengunjung. Periksa `storage/logs/` saat halaman menampilkan keadaan data kosong yang tidak diharapkan. Untuk produksi, arahkan `SIMS_LOG_DIR` ke lokasi privat di luar web root dan atur rotasi serta retensi log.
 

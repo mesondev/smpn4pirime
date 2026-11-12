@@ -46,11 +46,13 @@ if ($moduleKey === '') {
         'custom' => DateTimeImmutable::createFromFormat('!Y-m-d', $startInput) ?: $today->modify('-29 days'),
         default => $today->modify('-29 days'),
     };
+
     $periodEnd = match ($period) {
         'week' => $today->modify('sunday this week'),
         'custom' => DateTimeImmutable::createFromFormat('!Y-m-d', $endInput) ?: $today,
         default => $today,
     };
+
     if ($period === 'custom') {
         $parseDate = static fn(string $value): bool => $value !== '' && ($d = DateTimeImmutable::createFromFormat('!Y-m-d', $value)) && $d->format('Y-m-d') === $value;
         if (!$parseDate($startInput) || !$parseDate($endInput) || $periodStart > $periodEnd || $periodStart->diff($periodEnd)->days > 365) {
@@ -59,6 +61,7 @@ if ($moduleKey === '') {
             $periodEnd = $today;
         }
     }
+
     $rangeStart = $periodStart->format('Y-m-d');
     $rangeEnd = $periodEnd->format('Y-m-d');
     $years = $pdo->query('SELECT id,nama,aktif FROM tahun_ajaran ORDER BY nama DESC')->fetchAll();
@@ -69,6 +72,7 @@ if ($moduleKey === '') {
         $activeYearName = (string)$year['nama'];
         break;
     }
+
     $schoolYearId = trim((string)($_GET['tahun_ajaran_id'] ?? $activeYear));
     $academicSemester = trim((string)($_GET['semester'] ?? ''));
     if (!in_array($academicSemester, ['', '1', '2'], true)) $academicSemester = '';
@@ -83,6 +87,7 @@ if ($moduleKey === '') {
     } else {
         $studentSql .= " WHERE s.status='Aktif'";
     }
+
     $stmt = $pdo->prepare($studentSql);
     $stmt->execute($studentParams);
     $totalStudents = (int)$stmt->fetchColumn();
@@ -93,6 +98,7 @@ if ($moduleKey === '') {
         $classSql .= ' WHERE tahun_ajaran_id=?';
         $classParams[] = (int)$schoolYearId;
     }
+
     $stmt = $pdo->prepare($classSql);
     $stmt->execute($classParams);
     $classTotal = (int)$stmt->fetchColumn();
@@ -100,15 +106,17 @@ if ($moduleKey === '') {
     $schoolYearTotal = count($years);
     $adminAccountStats = ['total' => 0, 'admin' => 0, 'operator' => 0, 'kepala_sekolah' => 0, 'guru' => 0, 'siswa' => 0, 'nonaktif' => 0];
     $pendingBiodataTotal = 0;
-    if (in_array(current_role(), ['admin', 'operator'], true)) {
+    if (current_role() === 'operator') {
         $biodataTableCheck = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='biodata_pengguna'");
         $biodataTableCheck->execute();
         if ((int)$biodataTableCheck->fetchColumn() === 1) $pendingBiodataTotal = (int)$pdo->query("SELECT COUNT(*) FROM biodata_pengguna WHERE status_verifikasi='menunggu_verifikasi'")->fetchColumn();
     }
+
     if (current_role() === 'admin') {
         $accountStats = $pdo->query("SELECT COUNT(*) AS total,SUM(role='admin') AS admin,SUM(role='operator') AS operator,SUM(role='kepala_sekolah') AS kepala_sekolah,SUM(role='guru') AS guru,SUM(role='siswa') AS siswa,SUM(aktif=0) AS nonaktif FROM users")->fetch();
         if ($accountStats) foreach ($adminAccountStats as $key => $_) $adminAccountStats[$key] = (int)($accountStats[$key] ?? 0);
     }
+
 
     $studentAttendance = array_fill_keys(['Hadir', 'Izin', 'Sakit', 'Alpa'], 0);
     $stmt = $pdo->prepare('SELECT status,COUNT(*) AS jumlah FROM absensi WHERE tanggal BETWEEN ? AND ? GROUP BY status');
@@ -142,7 +150,7 @@ if ($moduleKey === '') {
     $operatorTodaySchedule = [];
     $todayAttendanceByClass = [];
     $operatorNotifications = [];
-    if (current_role() === 'operator') {
+    if (in_array(current_role(), ['admin', 'operator'], true)) {
         try {
             $recentOperatorStudents = $pdo->query("SELECT s.id,s.nis,s.nama,s.jenis_kelamin,s.status,k.nama_kelas FROM siswa s LEFT JOIN kelas k ON k.id=s.kelas_id ORDER BY s.id DESC LIMIT 6")->fetchAll();
         } catch (PDOException $ignored) {
@@ -210,12 +218,14 @@ if ($moduleKey === '') {
     $principalTodaySchedule = [];
     $principalPendingPlans = 0;
     $principalSubmittedPlans = [];
+
     if (current_role() === 'kepala_sekolah') {
         try {
             $principalSchoolProfile = $pdo->query('SELECT nama,npsn,alamat,email FROM profil_sekolah ORDER BY id LIMIT 1')->fetch() ?: [];
         } catch (PDOException $ignored) {
             $principalSchoolProfile = [];
         }
+
         try {
             $genderStmt = $pdo->prepare("SELECT jenis_kelamin,COUNT(*) AS jumlah FROM siswa s JOIN kelas k ON k.id=s.kelas_id WHERE s.status='Aktif'" . ($schoolYearId !== '' ? ' AND k.tahun_ajaran_id=?' : '') . ' GROUP BY jenis_kelamin');
             $genderStmt->execute($schoolYearId !== '' ? [(int)$schoolYearId] : []);
@@ -226,6 +236,7 @@ if ($moduleKey === '') {
             $principalStudentGender = ['L' => null, 'P' => null];
             $principalTeacherGender = ['L' => null, 'P' => null];
         }
+
         try {
             $todayStudentSql = "SELECT a.status,COUNT(*) AS jumlah FROM absensi a JOIN siswa s ON s.id=a.siswa_id LEFT JOIN kelas k ON k.id=s.kelas_id WHERE a.tanggal=? AND s.status='Aktif'" . ($schoolYearId !== '' ? ' AND k.tahun_ajaran_id=?' : '') . ' GROUP BY a.status';
             $todayStudentStmt = $pdo->prepare($todayStudentSql);
@@ -238,6 +249,7 @@ if ($moduleKey === '') {
         } catch (PDOException $ignored) {
             $principalAttendanceDataAvailable = false;
         }
+        
         try {
             $gradeStatusSql = "SELECT COUNT(*) FROM nilai WHERE status_publikasi<>'Terbit'";
             if ($schoolYearId !== '') $gradeStatusSql .= ' AND tahun_ajaran_id=' . (int)$schoolYearId;
@@ -474,59 +486,66 @@ if ($moduleKey === '') {
     $upcomingEvents = $pdo->query("SELECT judul,tanggal_mulai AS tanggal,kategori AS jenis FROM kalender_akademik WHERE tanggal_mulai>=CURDATE() AND status<>'Dibatalkan' UNION ALL SELECT nama_kegiatan,tanggal_mulai,'Kokurikuler' FROM kegiatan_kokurikuler WHERE tanggal_mulai>=CURDATE() AND status<>'Dibatalkan' ORDER BY tanggal LIMIT 5")->fetchAll();
     $schoolName = (string)$pdo->query('SELECT nama FROM profil_sekolah ORDER BY id LIMIT 1')->fetchColumn();
     if ($schoolName === '') $schoolName = 'SMP Negeri 4 Pirime';
-    $recentActivities = [];
-    if (current_role() === 'admin') {
-        try {
-            $recentActivities = $pdo->query('SELECT l.aksi,l.entitas,l.detail,l.created_at,u.nama_lengkap FROM log_aktivitas l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.created_at DESC,l.id DESC LIMIT 6')->fetchAll();
-        } catch (PDOException $ignored) {
-            $recentActivities = [];
-        }
-    }
     require __DIR__ . '/includes/header.php';
 ?>
     <div class="dashboard-heading">
         <div>
-            <h1><?= current_role() === 'admin' ? 'Dashboard Super Admin' : (current_role() === 'kepala_sekolah' ? 'Dashboard Kepala Sekolah' : 'Dashboard Operator') ?></h1>
-            <p><?= current_role() === 'admin' ? 'Pusat kontrol akun, data, keamanan, dan aktivitas sistem.' : (current_role() === 'kepala_sekolah' ? 'Ringkasan pemantauan sekolah dan kehadiran.' : 'Ringkasan pekerjaan administrasi sekolah.') ?> · <?= e($schoolName) ?></p>
+            <h1><?= current_role() === 'admin' ? 'Dashboard' : (current_role() === 'kepala_sekolah' ? 'Dashboard Kepala Sekolah' : 'Dashboard Operator') ?></h1>
+            <p><?= current_role() === 'admin' ? e($schoolName) : (current_role() === 'kepala_sekolah' ? 'Ringkasan pemantauan sekolah dan kehadiran.' : 'Ringkasan pekerjaan administrasi sekolah.') . ' · ' . e($schoolName) ?></p>
         </div>
-        <form method="get" class="dashboard-filter no-print">
-            <div><label class="form-label small mb-1" for="tahun_ajaran_id">Tahun Ajaran</label>
-                <select class="form-select form-select-sm" id="tahun_ajaran_id" name="tahun_ajaran_id">
-                    <option value="">Semua tahun</option>
-                    <?php foreach ($years as $year): ?>
-                        <option value="<?= (int)$year['id'] ?>" <?= (string)$year['id'] === $schoolYearId ? ' selected' : '' ?>>
-                            <?= e($year['nama']) ?>
-                            <?= (int)$year['aktif'] === 1 ? ' · Aktif' : '' ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <?php if (current_role() === 'kepala_sekolah'): ?><div><label class="form-label small mb-1" for="semester">Semester Nilai</label><select class="form-select form-select-sm" id="semester" name="semester">
-                        <option value="">Semua semester</option>
-                        <option value="1" <?= $academicSemester === '1' ? 'selected' : '' ?>>Ganjil</option>
-                        <option value="2" <?= $academicSemester === '2' ? 'selected' : '' ?>>Genap</option>
-                    </select></div><?php endif; ?>
-            <div><label class="form-label small mb-1" for="periode">Periode Kehadiran</label>
-                <select class="form-select form-select-sm" id="periode" name="periode" onchange="this.form.submit()">
-                    <?php foreach ($periodLabels as $key => $label): ?>
-                        <option value="<?= e($key) ?>"
-                            <?= $period === $key ? ' selected' : '' ?>>
-                            <?= e($label) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div>
-                <label class="form-label small mb-1" for="mulai">Dari</label>
-                <input class="form-control form-control-sm" id="mulai" type="date" name="mulai" value="<?= e($periodStart->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>>
-            </div>
-            <div>
-                <label class="form-label small mb-1" for="sampai">Sampai</label>
-                <input class="form-control form-control-sm" id="sampai" type="date" name="sampai" value="<?= e($periodEnd->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>>
-            </div>
-            <button class="btn btn-primary btn-sm">Terapkan</button>
-        </form>
+        <?php if (current_role() !== 'admin'): ?>
+            <form method="get" class="dashboard-filter no-print">
+                <div><label class="form-label small mb-1" for="tahun_ajaran_id">Tahun Ajaran</label>
+                    <select class="form-select form-select-sm" id="tahun_ajaran_id" name="tahun_ajaran_id">
+                        <option value="">Semua tahun</option>
+                        <?php foreach ($years as $year): ?>
+                            <option value="<?= (int)$year['id'] ?>" <?= (string)$year['id'] === $schoolYearId ? ' selected' : '' ?>>
+                                <?= e($year['nama']) ?>
+                                <?= (int)$year['aktif'] === 1 ? ' · Aktif' : '' ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php if (current_role() === 'kepala_sekolah'): ?><div><label class="form-label small mb-1" for="semester">Semester Nilai</label><select class="form-select form-select-sm" id="semester" name="semester">
+                            <option value="">Semua semester</option>
+                            <option value="1" <?= $academicSemester === '1' ? 'selected' : '' ?>>Ganjil</option>
+                            <option value="2" <?= $academicSemester === '2' ? 'selected' : '' ?>>Genap</option>
+                        </select></div><?php endif; ?>
+                <div><label class="form-label small mb-1" for="periode">Periode Kehadiran</label>
+                    <select class="form-select form-select-sm" id="periode" name="periode" onchange="this.form.submit()">
+                        <?php foreach ($periodLabels as $key => $label): ?>
+                            <option value="<?= e($key) ?>"
+                                <?= $period === $key ? ' selected' : '' ?>>
+                                <?= e($label) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label small mb-1" for="mulai">Dari</label>
+                    <input class="form-control form-control-sm" id="mulai" type="date" name="mulai" value="<?= e($periodStart->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>>
+                </div>
+                <div>
+                    <label class="form-label small mb-1" for="sampai">Sampai</label>
+                    <input class="form-control form-control-sm" id="sampai" type="date" name="sampai" value="<?= e($periodEnd->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>>
+                </div>
+                <button class="btn btn-primary btn-sm">Terapkan</button>
+            </form>
+        <?php endif; ?>
     </div>
+    <?php if (current_role() === 'admin'): ?>
+        <div class="dashboard-filter-wrap no-print mb-4">
+            <form method="get" class="dashboard-filter">
+                <div><label class="form-label small mb-1" for="tahun_ajaran_id">Tahun Ajaran</label><select class="form-select form-select-sm" id="tahun_ajaran_id" name="tahun_ajaran_id">
+                        <option value="">Semua tahun</option><?php foreach ($years as $year): ?><option value="<?= (int)$year['id'] ?>" <?= (string)$year['id'] === $schoolYearId ? ' selected' : '' ?>><?= e($year['nama']) ?><?= (int)$year['aktif'] === 1 ? ' · Aktif' : '' ?></option><?php endforeach; ?>
+                    </select></div>
+                <div><label class="form-label small mb-1" for="periode">Periode Kehadiran</label><select class="form-select form-select-sm" id="periode" name="periode" onchange="this.form.submit()"><?php foreach ($periodLabels as $key => $label): ?><option value="<?= e($key) ?>" <?= $period === $key ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select></div>
+                <div><label class="form-label small mb-1" for="mulai">Dari</label><input class="form-control form-control-sm" id="mulai" type="date" name="mulai" value="<?= e($periodStart->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>></div>
+                <div><label class="form-label small mb-1" for="sampai">Sampai</label><input class="form-control form-control-sm" id="sampai" type="date" name="sampai" value="<?= e($periodEnd->format('Y-m-d')) ?>" <?= $period === 'custom' ? '' : ' disabled' ?>></div>
+                <button class="btn btn-primary btn-sm">Terapkan</button>
+            </form>
+        </div>
+    <?php endif; ?>
     <?php if ($filterError !== ''): ?>
         <div class="alert alert-warning no-print">
             <?= e($filterError) ?>
@@ -825,37 +844,64 @@ if ($moduleKey === '') {
                         </dl>
                     </details>
                     <div class="d-grid gap-2"><a class="btn btn-outline-primary text-start" href="users.php"><i class="bi bi-person-gear me-2"></i>Manajemen Pengguna</a><a class="btn btn-outline-primary text-start" href="biodata.php"><i class="bi bi-person-check me-2"></i>Persetujuan Biodata (<?= number_format($pendingBiodataTotal, 0, ',', '.') ?> menunggu)</a><a class="btn btn-outline-primary text-start" href="passwords.php"><i class="bi bi-key me-2"></i>Reset Password</a><a class="btn btn-outline-primary text-start" href="index.php?module=guru"><i class="bi bi-person-badge me-2"></i>Data Guru</a><a class="btn btn-outline-primary text-start" href="activity.php"><i class="bi bi-clock-history me-2"></i>Log Aktivitas</a><a class="btn btn-outline-primary text-start" href="learning.php?view=materi"><i class="bi bi-mortarboard me-2"></i>Pemantauan Materi & Tugas</a><a class="btn btn-outline-primary text-start" href="index.php?module=profil_sekolah"><i class="bi bi-gear me-2"></i>Pengaturan Sekolah</a></div>
-                    <p class="small text-secondary mt-3 mb-0">Backup dan uji pemulihan tersedia melalui CLI. Atur jadwal dan salinan terpisah sesuai panduan <code>docs/backup-restore.md</code>; tombol backup di dashboard belum tersedia.</p>
-                </section>
-            </div>
-            <div class="col-xl-8">
-                <section class="card p-3 p-md-4 h-100">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h2 class="h5 mb-0">Aktivitas Terbaru</h2><a class="small" href="activity.php">Buka log lengkap</a>
-                    </div><?php if (!$recentActivities): ?>
-                        <div class="empty-state">Belum ada aktivitas tercatat.</div>
-                    <?php else: ?>
-                        <div class="table-responsive">
-                            <table class="table table-sm align-middle mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Waktu</th>
-                                        <th>Pengguna</th>
-                                        <th>Tindakan</th>
-                                        <th>Modul</th>
-                                    </tr>
-                                </thead>
-                                <tbody><?php foreach ($recentActivities as $activity): ?><tr>
-                                            <td class="text-nowrap"><?= e($activity['created_at']) ?></td>
-                                            <td><?= e($activity['nama_lengkap'] ?: 'Akun dihapus') ?></td>
-                                            <td><?= e($activity['aksi']) ?></td>
-                                            <td><?= e($activity['entitas']) ?></td>
-                                        </tr><?php endforeach; ?></tbody>
-                            </table>
-                        </div><?php endif; ?>
+                    <section class="border rounded-3 p-3 mt-3" id="backup" aria-labelledby="dashboardBackupTitle">
+                        <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                            <div>
+                                <h3 class="h6 mb-1" id="dashboardBackupTitle"><i class="bi bi-database-lock me-1 text-primary" aria-hidden="true"></i>Backup database dan berkas</h3>
+                                <p class="small text-secondary mb-0">Simpan salinan <code>sims_db</code>, uploads, dan storage di luar folder aplikasi.</p>
+                            </div>
+                        </div>
+                        <form method="post" action="backup_action.php" onsubmit="return confirm('Buat backup database dan berkas sekarang? Proses dapat memerlukan beberapa menit.');">
+                            <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
+                            <button class="btn btn-primary w-100" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i>Buat backup sekarang</button>
+                        </form>
+                    </section>
                 </section>
             </div>
         </div><?php endif; ?>
+    <?php if (current_role() !== 'admin' && !in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true)): ?><section class="dashboard-quick-insights mb-4" aria-labelledby="dashboardInsightsTitle">
+            <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+                <div>
+                    <h2 class="h5 mb-1" id="dashboardInsightsTitle">Ikhtisar Visual Sekolah</h2>
+                    <p class="small text-secondary mb-0">Ringkasan data utama dan kehadiran · <?= e($periodLabels[$period]) ?></p>
+                </div><a class="small text-decoration-none" href="reports.php">Buka laporan lengkap <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-xl-6">
+                    <article class="card chart-card dashboard-mini-chart h-100">
+                        <h3 class="chart-title">Komposisi Akun</h3>
+                        <p class="chart-subtitle">Pengguna terdaftar menurut peran, termasuk akun nonaktif.</p><?php $accountRoleRows = [['Super Admin', $adminAccountStats['admin'], '#6c63ff'], ['Operator', $adminAccountStats['operator'], '#f0a43a'], ['Kepala Sekolah', $adminAccountStats['kepala_sekolah'], '#e76f9a'], ['Guru', $adminAccountStats['guru'], '#22a889'], ['Siswa', $adminAccountStats['siswa'], '#3988e8']];
+                                                                                                                $accountRoleMax = max(1, ...array_column($accountRoleRows, 1)); ?><div class="dashboard-mini-bars" role="list" aria-label="Jumlah akun menurut peran"><?php foreach ($accountRoleRows as [$roleLabel, $roleCount, $roleColor]): ?><div class="dashboard-mini-bar-row" role="listitem"><span><?= e($roleLabel) ?></span>
+                                    <div class="dashboard-mini-track"><i style="--bar-width:<?= round((int)$roleCount * 100 / $accountRoleMax, 1) ?>%;--bar-color:<?= e($roleColor) ?>"></i></div><strong><?= number_format((int)$roleCount, 0, ',', '.') ?></strong>
+                                </div><?php endforeach; ?></div>
+                        <div class="dashboard-mini-foot"><span><?= number_format($adminAccountStats['total'], 0, ',', '.') ?> akun total</span><span><?= number_format($adminAccountStats['nonaktif'], 0, ',', '.') ?> nonaktif</span></div>
+                    </article>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <article class="card chart-card dashboard-mini-chart h-100">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <h3 class="chart-title">Status Kehadiran Siswa</h3>
+                                <p class="chart-subtitle">Catatan absensi · <?= e($rangeStart) ?> – <?= e($rangeEnd) ?></p>
+                            </div><span class="dashboard-mini-total"><?= number_format($studentAttendanceTotal, 0, ',', '.') ?><small>catatan</small></span>
+                        </div><?php $attendanceColors = ['Hadir' => '#22a889', 'Izin' => '#f0a43a', 'Sakit' => '#3988e8', 'Alpa' => '#e76f6a'];
+                                $attendanceMax = max(1, ...array_values($studentAttendance)); ?><?php if ($studentAttendanceTotal > 0): ?><div class="dashboard-mini-bars" role="list" aria-label="Jumlah absensi menurut status"><?php foreach ($studentAttendance as $attendanceLabel => $attendanceCount): ?><div class="dashboard-mini-bar-row" role="listitem"><span><?= e($attendanceLabel) ?></span>
+                                    <div class="dashboard-mini-track"><i style="--bar-width:<?= round((int)$attendanceCount * 100 / $attendanceMax, 1) ?>%;--bar-color:<?= e($attendanceColors[$attendanceLabel]) ?>"></i></div><strong><?= number_format($attendanceCount, 0, ',', '.') ?></strong>
+                                </div><?php endforeach; ?></div>
+                        <div class="dashboard-mini-foot"><span>Tingkat hadir</span><strong><?= $studentAttendanceRate === null ? '—' : number_format($studentAttendanceRate, 1, ',', '.') . '%' ?></strong></div><?php else: ?><div class="dashboard-mini-empty"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Belum ada catatan absensi siswa pada periode ini.</span></div><?php endif; ?>
+                    </article>
+                </div>
+                <div class="col-12">
+                    <article class="card chart-card dashboard-mini-chart dashboard-data-health">
+                        <h3 class="chart-title">Kesiapan Data Inti</h3>
+                        <p class="chart-subtitle">Kelompok data yang sudah tercatat.</p><?php $healthRows = [['Siswa aktif', $totalStudents, 'bi-mortarboard', 'blue'], ['Guru aktif', $teacherTotal, 'bi-person-workspace', 'green'], ['Kelas', $classTotal, 'bi-door-open', 'orange'], ['Mata pelajaran', $subjectTotal, 'bi-book-half', 'purple']]; ?><div class="dashboard-health-grid"><?php foreach ($healthRows as [$healthLabel, $healthCount, $healthIcon, $healthColor]): ?><div class="dashboard-health-item"><span class="stat-icon <?= e($healthColor) ?>"><i class="bi <?= e($healthIcon) ?>" aria-hidden="true"></i></span>
+                                    <div><strong><?= number_format((int)$healthCount, 0, ',', '.') ?></strong><small><?= e($healthLabel) ?></small></div>
+                                </div><?php endforeach; ?></div>
+                    </article>
+                </div>
+            </div>
+        </section><?php endif; ?>
+
     <?php if (in_array(current_role(), ['admin', 'operator', 'kepala_sekolah'], true)): ?><div class="row g-3 mb-4 dashboard-analytics-primary">
             <div class="col-12 col-xl-8">
                 <section class="card chart-card student-trend-card" aria-labelledby="studentIntakeTitle">
@@ -927,6 +973,49 @@ if ($moduleKey === '') {
             </div>
         </div>
     </div>
+    <?php if (current_role() === 'admin'): ?>
+        <section class="dashboard-quick-insights mb-4" aria-labelledby="dashboardInsightsTitle">
+            <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+                <div>
+                    <h2 class="h5 mb-1" id="dashboardInsightsTitle">Ikhtisar Visual Sekolah</h2>
+                    <p class="small text-secondary mb-0">Ringkasan data utama dan kehadiran · <?= e($periodLabels[$period]) ?></p>
+                </div><a class="small text-decoration-none" href="reports.php">Buka laporan lengkap <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-xl-6">
+                    <article class="card chart-card dashboard-mini-chart h-100">
+                        <h3 class="chart-title">Komposisi Akun</h3>
+                        <p class="chart-subtitle">Pengguna terdaftar menurut peran, termasuk akun nonaktif.</p><?php $accountRoleRows = [['Super Admin', $adminAccountStats['admin'], '#6c63ff'], ['Operator', $adminAccountStats['operator'], '#f0a43a'], ['Kepala Sekolah', $adminAccountStats['kepala_sekolah'], '#e76f9a'], ['Guru', $adminAccountStats['guru'], '#22a889'], ['Siswa', $adminAccountStats['siswa'], '#3988e8']];
+                                                                                                                $accountRoleMax = max(1, ...array_column($accountRoleRows, 1)); ?><div class="dashboard-mini-bars" role="list" aria-label="Jumlah akun menurut peran"><?php foreach ($accountRoleRows as [$roleLabel, $roleCount, $roleColor]): ?><div class="dashboard-mini-bar-row" role="listitem"><span><?= e($roleLabel) ?></span>
+                                    <div class="dashboard-mini-track"><i style="--bar-width:<?= round((int)$roleCount * 100 / $accountRoleMax, 1) ?>%;--bar-color:<?= e($roleColor) ?>"></i></div><strong><?= number_format((int)$roleCount, 0, ',', '.') ?></strong>
+                                </div><?php endforeach; ?></div>
+                        <div class="dashboard-mini-foot"><span><?= number_format($adminAccountStats['total'], 0, ',', '.') ?> akun total</span><span><?= number_format($adminAccountStats['nonaktif'], 0, ',', '.') ?> nonaktif</span></div>
+                    </article>
+                </div>
+                <div class="col-12 col-xl-6">
+                    <article class="card chart-card dashboard-mini-chart h-100">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <h3 class="chart-title">Status Kehadiran Siswa</h3>
+                                <p class="chart-subtitle">Catatan absensi · <?= e($rangeStart) ?> – <?= e($rangeEnd) ?></p>
+                            </div><span class="dashboard-mini-total"><?= number_format($studentAttendanceTotal, 0, ',', '.') ?><small>catatan</small></span>
+                        </div><?php $attendanceColors = ['Hadir' => '#22a889', 'Izin' => '#f0a43a', 'Sakit' => '#3988e8', 'Alpa' => '#e76f6a'];
+                                $attendanceMax = max(1, ...array_values($studentAttendance)); ?><?php if ($studentAttendanceTotal > 0): ?><div class="dashboard-mini-bars" role="list" aria-label="Jumlah absensi menurut status"><?php foreach ($studentAttendance as $attendanceLabel => $attendanceCount): ?><div class="dashboard-mini-bar-row" role="listitem"><span><?= e($attendanceLabel) ?></span>
+                                    <div class="dashboard-mini-track"><i style="--bar-width:<?= round((int)$attendanceCount * 100 / $attendanceMax, 1) ?>%;--bar-color:<?= e($attendanceColors[$attendanceLabel]) ?>"></i></div><strong><?= number_format($attendanceCount, 0, ',', '.') ?></strong>
+                                </div><?php endforeach; ?></div>
+                        <div class="dashboard-mini-foot"><span>Tingkat hadir</span><strong><?= $studentAttendanceRate === null ? '—' : number_format($studentAttendanceRate, 1, ',', '.') . '%' ?></strong></div><?php else: ?><div class="dashboard-mini-empty"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>Belum ada catatan absensi siswa pada periode ini.</span></div><?php endif; ?>
+                    </article>
+                </div>
+                <div class="col-12">
+                    <article class="card chart-card dashboard-mini-chart dashboard-data-health">
+                        <h3 class="chart-title">Kesiapan Data Inti</h3>
+                        <p class="chart-subtitle">Kelompok data yang sudah tercatat.</p><?php $healthRows = [['Siswa aktif', $totalStudents, 'bi-mortarboard', 'blue'], ['Guru aktif', $teacherTotal, 'bi-person-workspace', 'green'], ['Kelas', $classTotal, 'bi-door-open', 'orange'], ['Mata pelajaran', $subjectTotal, 'bi-book-half', 'purple']]; ?><div class="dashboard-health-grid"><?php foreach ($healthRows as [$healthLabel, $healthCount, $healthIcon, $healthColor]): ?><div class="dashboard-health-item"><span class="stat-icon <?= e($healthColor) ?>"><i class="bi <?= e($healthIcon) ?>" aria-hidden="true"></i></span>
+                                    <div><strong><?= number_format((int)$healthCount, 0, ',', '.') ?></strong><small><?= e($healthLabel) ?></small></div>
+                                </div><?php endforeach; ?></div>
+                    </article>
+                </div>
+            </div>
+        </section><?php endif; ?>
     <div class="row g-3 mb-4 dashboard-announcement-agenda">
         <div class="col-lg-6">
             <div class="card chart-card">
@@ -1018,8 +1107,8 @@ if ($moduleKey === '') {
                                 <div class="principal-mini-stat"><small>Guru perempuan</small><strong><?= $principalTeacherGender['P'] === null ? 'Belum tersedia' : number_format($principalTeacherGender['P'], 0, ',', '.') ?></strong></div>
                             </div>
                         </div>
-                        <p class="small text-secondary mt-3 mb-0">Jumlah tenaga kependidikan/staf belum dapat diringkas karena SIMS belum memiliki data induk staf terpisah.</p>
-                        <div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-sm btn-outline-primary" href="reports.php?type=siswa"><i class="bi bi-people me-1"></i>Data siswa</a><a class="btn btn-sm btn-outline-primary" href="reports.php?type=guru"><i class="bi bi-person-badge me-1"></i>Data guru</a><a class="btn btn-sm btn-outline-primary" href="reports.php?type=kelas"><i class="bi bi-door-open me-1"></i>Data kelas</a></div>
+                        <p class="small text-secondary mt-3 mb-0">Data tenaga kependidikan non-guru dikelola terpisah agar data guru dan relasi yang sudah ada tetap aman.</p>
+                        <div class="d-flex flex-wrap gap-2 mt-3"><a class="btn btn-sm btn-outline-primary" href="reports.php?type=siswa"><i class="bi bi-people me-1"></i>Data siswa</a><a class="btn btn-sm btn-outline-primary" href="reports.php?type=guru"><i class="bi bi-person-badge me-1"></i>Data guru</a><?php if (can_view_module('staf')): ?><a class="btn btn-sm btn-outline-primary" href="index.php?module=staf"><i class="bi bi-person-workspace me-1"></i>Tenaga kependidikan</a><?php endif; ?><a class="btn btn-sm btn-outline-primary" href="reports.php?type=kelas"><i class="bi bi-door-open me-1"></i>Data kelas</a></div>
                     </div>
                 </div>
             </div>
@@ -1535,6 +1624,7 @@ if ($moduleKey === '') {
                     });
                 })();
     </script>
+
 <?php require __DIR__ . '/includes/footer.php';
     exit;
 }
@@ -1551,6 +1641,7 @@ $cfg = $modules[$moduleKey];
 $table = $cfg['table'];
 $pk = $cfg['pk'];
 $fields = $cfg['fields'];
+$cols = $cfg['columns'];
 $pageTitle = $cfg['title'];
 $action = (string)($_GET['action'] ?? 'list');
 $_createFormRestore = [];
@@ -1561,6 +1652,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['open_add'])) {
 if ($action === 'list' && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_form_action'] ?? '') === 'create') $action = 'create';
 if ($action === 'create' && $_SERVER['REQUEST_METHOD'] !== 'POST' && $moduleKey !== 'profil_sekolah') redirect('index.php?module=' . rawurlencode($moduleKey) . '&open_add=1');
 $migrationRequirements = [
+    'staf' => ['staff' => ['id', 'nip', 'nama', 'jenis_kelamin', 'jabatan', 'unit_kerja', 'no_hp', 'email', 'alamat', 'status', 'tanggal_masuk', 'created_at', 'updated_at']],
     'berita_sekolah' => ['berita_sekolah' => ['id', 'judul', 'ringkasan', 'isi', 'kategori', 'gambar_url', 'status', 'published_at', 'created_at', 'review_status']],
     'galeri_sekolah' => ['galeri_sekolah' => ['id', 'judul', 'keterangan', 'gambar_url', 'tanggal_kegiatan', 'status', 'created_at', 'review_status']],
     'pengumuman' => ['pengumuman' => ['review_status']],
@@ -1623,6 +1715,91 @@ if ($moduleKey === 'profil_sekolah' && $action === 'create') {
     if ($profileId > 0) redirect('index.php?module=profil_sekolah&action=edit&id=' . $profileId);
 }
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
+
+// Halaman detail baca-saja dipakai bersama oleh tabel CRUD dan tabel ringkasan dashboard.
+if ($action === 'view') {
+    if ($id < 1) {
+        http_response_code(404);
+        exit('Data yang diminta tidak ditemukan.');
+    }
+    // Detail memakai semua field yang dikelola modul; daftar tabel boleh tetap ringkas.
+    $detailFieldKeys = array_keys($fields);
+    if ($isEditorialContent && in_array('review_status', $editorialColumns, true)) $detailFieldKeys[] = 'review_status';
+    $detailColumns = array_values(array_unique(array_merge([$pk], $detailFieldKeys)));
+    $detailSql = 'SELECT `' . implode('`,`', $detailColumns) . '` FROM `' . $table . '` WHERE `' . $pk . '`=? LIMIT 1';
+    $detailStmt = $pdo->prepare($detailSql);
+    $detailStmt->execute([$id]);
+    $detailRow = $detailStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$detailRow) {
+        http_response_code(404);
+        exit('Data yang diminta tidak ditemukan.');
+    }
+    $detailHistoryAvailable = $moduleKey === 'siswa' && db_has_column($pdo, 'student_class_history', 'id');
+    $detailHistoryRows = [];
+    if ($detailHistoryAvailable) {
+        $historyPreview = $pdo->prepare('SELECT h.kelas_asal_id,h.tahun_ajaran_asal_id,h.kelas_tujuan_id,h.tahun_ajaran_tujuan_id,h.alasan,h.dibuat_pada,k1.nama_kelas AS kelas_asal,ta1.nama AS tahun_asal,k2.nama_kelas AS kelas_tujuan,ta2.nama AS tahun_tujuan,u.nama_lengkap AS petugas FROM student_class_history h LEFT JOIN kelas k1 ON k1.id=h.kelas_asal_id LEFT JOIN tahun_ajaran ta1 ON ta1.id=h.tahun_ajaran_asal_id JOIN kelas k2 ON k2.id=h.kelas_tujuan_id JOIN tahun_ajaran ta2 ON ta2.id=h.tahun_ajaran_tujuan_id LEFT JOIN users u ON u.id=h.actor_user_id WHERE h.siswa_id=? ORDER BY h.dibuat_pada DESC,h.id DESC LIMIT 5');
+        $historyPreview->execute([$id]);
+        $detailHistoryRows = $historyPreview->fetchAll();
+    }
+    require __DIR__ . '/includes/header.php';
+    $detailRelationLabels = [];
+    $detailStaticLabels = [];
+    foreach ($detailFieldKeys as $detailColumn) {
+        if (isset($fields[$detailColumn]['relation'])) $detailRelationLabels[$detailColumn] = relation_options($pdo, $fields[$detailColumn]['relation']);
+        elseif (isset($fields[$detailColumn]['options'])) $detailStaticLabels[$detailColumn] = $fields[$detailColumn]['options'];
+    }
+?>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <p class="text-secondary mb-1">Detail data</p>
+            <h1 class="h3 mb-0"><?= e($pageTitle) ?></h1>
+        </div>
+        <div class="d-flex flex-wrap gap-2"><a class="btn btn-outline-secondary" href="index.php?module=<?= e($moduleKey) ?>"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Kembali</a><?php if (can_manage_module($moduleKey)): ?><a class="btn btn-primary" href="index.php?module=<?= e($moduleKey) ?>&amp;action=edit&amp;id=<?= $id ?>"><i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit</a><?php endif; ?></div>
+    </div>
+    <section class="card p-3 p-md-4" aria-label="Rincian <?= e($pageTitle) ?>">
+        <dl class="row mb-0">
+            <?php foreach ($detailFieldKeys as $detailColumn): $detailValue = $detailRow[$detailColumn] ?? null;
+                if (isset($detailRelationLabels[$detailColumn])) $detailValue = $detailRelationLabels[$detailColumn][(string)$detailValue] ?? $detailValue;
+                elseif (isset($detailStaticLabels[$detailColumn])) $detailValue = $detailStaticLabels[$detailColumn][(string)$detailValue] ?? $detailValue;
+                $detailLabel = $fields[$detailColumn]['label'] ?? field_label($detailColumn); ?>
+                <div class="col-12 col-md-6 border-bottom py-3">
+                    <dt class="small text-secondary mb-1"><?= e($detailLabel) ?></dt>
+                    <dd class="mb-0 text-break"><?= $detailValue === null || $detailValue === '' ? '<span class="text-secondary">—</span>' : nl2br(e((string)$detailValue)) ?></dd>
+                </div>
+            <?php endforeach; ?>
+        </dl>
+    </section>
+    <?php if ($detailHistoryAvailable): ?><section class="card p-3 p-md-4 mt-3" aria-labelledby="studentHistoryTitle">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <h2 class="h5 mb-1" id="studentHistoryTitle">Riwayat Kelas</h2>
+                    <p class="small text-secondary mb-0">Perubahan kelas yang tercatat setelah fitur riwayat diaktifkan.</p>
+                </div><a class="btn btn-sm btn-outline-primary" href="student_class_history.php?siswa_id=<?= $id ?>"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>Lihat semua riwayat</a>
+            </div><?php if (!$detailHistoryRows): ?><p class="text-secondary mb-0">Belum ada riwayat yang tercatat. Data lama tidak dibuat ulang tanpa dokumen sumber resmi.</p><?php else: ?><div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Periode/Kelas asal</th>
+                                <th>Periode/Kelas tujuan</th>
+                                <th>Tanggal</th>
+                                <th>Alasan</th>
+                                <th>Petugas</th>
+                            </tr>
+                        </thead>
+                        <tbody><?php foreach ($detailHistoryRows as $historyRow): ?><tr>
+                                    <td><?= e(($historyRow['tahun_asal'] ?? '—') . ' · ' . ($historyRow['kelas_asal'] ?? 'Belum tercatat')) ?></td>
+                                    <td><?= e($historyRow['tahun_tujuan'] . ' · ' . $historyRow['kelas_tujuan']) ?></td>
+                                    <td class="text-nowrap"><?= e(date('d M Y H:i', strtotime($historyRow['dibuat_pada']))) ?></td>
+                                    <td><?= e($historyRow['alasan'] ?: '—') ?></td>
+                                    <td><?= e($historyRow['petugas'] ?: 'Akun tidak tersedia') ?></td>
+                                </tr><?php endforeach; ?></tbody>
+                    </table>
+                </div><?php endif; ?>
+        </section><?php endif; ?>
+    <?php if (can_manage_module($moduleKey) && $moduleKey !== 'profil_sekolah'): ?><form method="post" action="index.php?module=<?= e($moduleKey) ?>&amp;action=delete&amp;id=<?= $id ?>" class="mt-3" onsubmit="return confirm('Hapus data ini? Tindakan ini tidak dapat dibatalkan.');"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-1" aria-hidden="true"></i>Hapus data</button></form><?php endif; ?>
+<?php require __DIR__ . '/includes/footer.php';
+    exit;
+}
 
 function get_form_value(array $field, string $key): string
 {
@@ -1744,6 +1921,9 @@ if ($action === 'delete' && $id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
     try {
         $assetsToRemove = [];
+        $deleteAuditRecordStmt = $pdo->prepare("SELECT * FROM `$table` WHERE `$pk`=?");
+        $deleteAuditRecordStmt->execute([$id]);
+        $deleteAuditRecord = $deleteAuditRecordStmt->fetch() ?: null;
         if ($isOperatorAuthor && in_array('created_by', $editorialColumns, true)) {
             $owner = $pdo->prepare("SELECT created_by FROM `$table` WHERE `$pk`=?");
             $owner->execute([$id]);
@@ -1762,7 +1942,7 @@ if ($action === 'delete' && $id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $pdo->prepare("DELETE FROM `$table` WHERE `$pk` = ?");
         $stmt->execute([$id]);
         foreach ($assetsToRemove as $storedAsset) portal_remove_stored_asset($storedAsset);
-        record_activity($pdo, 'hapus', $table, $id);
+        record_activity($pdo, 'hapus', $table, $id, null, $deleteAuditRecord, null);
         flash('Data berhasil dihapus.');
     } catch (PDOException $ex) {
         flash('Data tidak dapat dihapus karena masih digunakan oleh data lain.', 'warning');
@@ -1891,8 +2071,10 @@ if (in_array($action, ['create', 'edit'], true)) {
                 'tiktok' => ['tiktok.com', 'www.tiktok.com'],
                 'twitter-x' => ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'],
             ];
-            if (!filter_var($socialUrl, FILTER_VALIDATE_URL) || strtolower((string)parse_url($socialUrl, PHP_URL_SCHEME)) !== 'https'
-                || !in_array($host, $hostAllowlist[$socialPlatform] ?? [], true)) {
+            if (
+                !filter_var($socialUrl, FILTER_VALIDATE_URL) || strtolower((string)parse_url($socialUrl, PHP_URL_SCHEME)) !== 'https'
+                || !in_array($host, $hostAllowlist[$socialPlatform] ?? [], true)
+            ) {
                 $error = 'Gunakan URL HTTPS dari domain resmi platform media sosial yang dipilih.';
             }
         }
@@ -1917,6 +2099,15 @@ if (in_array($action, ['create', 'edit'], true)) {
                     $stmt = $pdo->prepare($sql);
                     $stmt->execute(array_values($values));
                     $savedId = (int)$pdo->lastInsertId();
+                    if ($moduleKey === 'siswa' && db_has_column($pdo, 'student_class_history', 'id')) {
+                        $classYear = $pdo->prepare('SELECT tahun_ajaran_id FROM kelas WHERE id=?');
+                        $classYear->execute([(int)$values['kelas_id']]);
+                        $yearId = (int)$classYear->fetchColumn();
+                        if ($yearId > 0) {
+                            $history = $pdo->prepare('INSERT INTO student_class_history (siswa_id,kelas_asal_id,tahun_ajaran_asal_id,kelas_tujuan_id,tahun_ajaran_tujuan_id,alasan,actor_user_id) VALUES (?,NULL,NULL,?,?,?,?)');
+                            $history->execute([$savedId, (int)$values['kelas_id'], $yearId, 'Pencatatan kelas awal siswa.', (int)($_SESSION['user_id'] ?? 0) ?: null]);
+                        }
+                    }
                     $isPortalRecord = str_starts_with($moduleKey, 'portal_');
                     $createdStatus = (string) ($values['status'] ?? '');
                     record_activity(
@@ -1924,7 +2115,9 @@ if (in_array($action, ['create', 'edit'], true)) {
                         $isPortalRecord ? ($createdStatus === 'Terbit' ? 'menerbitkan konten publik' : 'menambah konten portal') : 'tambah',
                         $table,
                         $savedId,
-                        $isPortalRecord ? $createdStatus : null
+                        $isPortalRecord ? $createdStatus : null,
+                        null,
+                        $values
                     );
                     if ($isEditorialContent && isset($values['review_status'])) {
                         $reviewLog = $pdo->prepare('INSERT INTO konten_review_log (entitas,record_id,status_awal,status_akhir,catatan,user_id) VALUES (?,?,NULL,?,?,?)');
@@ -1948,6 +2141,19 @@ if (in_array($action, ['create', 'edit'], true)) {
                     $sql = "UPDATE `$table` SET " . implode(', ', $sets) . " WHERE `$pk` = ?";
                     $stmt = $pdo->prepare($sql);
                     $stmt->execute([...array_values($values), $id]);
+                    if ($moduleKey === 'siswa' && (int)($record['kelas_id'] ?? 0) !== (int)($values['kelas_id'] ?? 0) && db_has_column($pdo, 'student_class_history', 'id')) {
+                        $classYear = $pdo->prepare('SELECT id,tahun_ajaran_id FROM kelas WHERE id IN (?,?)');
+                        $classYear->execute([(int)$record['kelas_id'], (int)$values['kelas_id']]);
+                        $classMap = [];
+                        foreach ($classYear->fetchAll() as $classRow) $classMap[(int)$classRow['id']] = (int)$classRow['tahun_ajaran_id'];
+                        $fromYear = $classMap[(int)$record['kelas_id']] ?? 0;
+                        $toYear = $classMap[(int)$values['kelas_id']] ?? 0;
+                        if ($fromYear < 1 || $toYear < 1) throw new RuntimeException('Tahun ajaran kelas asal/tujuan tidak ditemukan.');
+                        $reason = trim((string)($_POST['class_change_reason'] ?? ''));
+                        $history = $pdo->prepare('INSERT INTO student_class_history (siswa_id,kelas_asal_id,tahun_ajaran_asal_id,kelas_tujuan_id,tahun_ajaran_tujuan_id,alasan,actor_user_id) VALUES (?,?,?,?,?,?,?)');
+                        $reason = $reason === '' ? null : (function_exists('mb_substr') ? mb_substr($reason, 0, 500) : substr($reason, 0, 500));
+                        $history->execute([$id, (int)$record['kelas_id'], $fromYear, (int)$values['kelas_id'], $toYear, $reason, (int)($_SESSION['user_id'] ?? 0) ?: null]);
+                    }
                     $isPortalRecord = str_starts_with($moduleKey, 'portal_');
                     $previousStatus = (string) ($record['status'] ?? '');
                     $updatedStatus = (string) ($values['status'] ?? $previousStatus);
@@ -1959,7 +2165,9 @@ if (in_array($action, ['create', 'edit'], true)) {
                         $isPortalRecord ? $portalAction : 'ubah',
                         $table,
                         $id,
-                        $isPortalRecord ? ($previousStatus . ' → ' . $updatedStatus) : null
+                        $isPortalRecord ? ($previousStatus . ' → ' . $updatedStatus) : null,
+                        $record,
+                        $values
                     );
                     if ($isEditorialContent && isset($values['review_status']) && $previousReviewStatus !== $values['review_status']) {
                         $reviewLog = $pdo->prepare('INSERT INTO konten_review_log (entitas,record_id,status_awal,status_akhir,catatan,user_id) VALUES (?,?,?,?,?,?)');
@@ -1974,8 +2182,10 @@ if (in_array($action, ['create', 'edit'], true)) {
                 if ($pdo->inTransaction()) $pdo->rollBack();
                 foreach ($newUploads as $newUpload) portal_remove_stored_asset($newUpload);
                 foreach ($fields as $assetKey => $assetField) {
-                    if (in_array(($assetField['type'] ?? ''), ['image_upload', 'pdf_upload'], true)
-                        && in_array((string) ($values[$assetKey] ?? ''), $newUploads, true)) {
+                    if (
+                        in_array(($assetField['type'] ?? ''), ['image_upload', 'pdf_upload'], true)
+                        && in_array((string) ($values[$assetKey] ?? ''), $newUploads, true)
+                    ) {
                         $values[$assetKey] = $record[$assetKey] ?? null;
                     }
                 }
@@ -1985,8 +2195,10 @@ if (in_array($action, ['create', 'edit'], true)) {
         } else {
             foreach ($newUploads as $newUpload) portal_remove_stored_asset($newUpload);
             foreach ($fields as $assetKey => $assetField) {
-                if (in_array(($assetField['type'] ?? ''), ['image_upload', 'pdf_upload'], true)
-                    && in_array((string) ($values[$assetKey] ?? ''), $newUploads, true)) {
+                if (
+                    in_array(($assetField['type'] ?? ''), ['image_upload', 'pdf_upload'], true)
+                    && in_array((string) ($values[$assetKey] ?? ''), $newUploads, true)
+                ) {
                     $values[$assetKey] = $record[$assetKey] ?? null;
                 }
             }
@@ -2012,6 +2224,9 @@ if (in_array($action, ['create', 'edit'], true)) {
             <div class="row"><?php foreach ($fields as $key => $field): if ($isOperatorAuthor && ($key === 'tampil_publik' || ($key === 'status' && $moduleKey !== 'kalender_akademik'))) continue;
                                     render_input($key, $field, $record[$key] ?? $field['default'] ?? '', isset($field['relation']) ? relation_options($pdo, $field['relation']) : []);
                                 endforeach; ?>
+                <?php if ($moduleKey === 'siswa' && $action === 'edit' && db_has_column($pdo, 'student_class_history', 'id')): ?><div class="col-12 mb-3"><label class="form-label" for="class_change_reason">Alasan perpindahan kelas (opsional)</label><textarea class="form-control" id="class_change_reason" name="class_change_reason" rows="2" maxlength="500" placeholder="Contoh: kenaikan kelas atau penyesuaian rombongan belajar"><?= e($_POST['class_change_reason'] ?? '') ?></textarea>
+                        <div class="form-text">Disimpan bersama kelas asal/tujuan, tahun ajaran, akun petugas, dan waktu perubahan.</div>
+                    </div><?php endif; ?>
                 <?php if ($isOperatorAuthor): ?><div class="col-12 mb-3"><label class="form-label" for="review_action">Tindakan konten</label><select class="form-select" id="review_action" name="review_action">
                             <option value="draft">Simpan sebagai draf</option>
                             <option value="submit" <?= ($_POST['review_action'] ?? '') === 'submit' ? 'selected' : '' ?>>Ajukan untuk persetujuan</option>
@@ -2027,6 +2242,15 @@ if (in_array($action, ['create', 'edit'], true)) {
 }
 $q = trim((string)($_GET['q'] ?? ''));
 $cols = $cfg['columns'];
+$staffJabatanOptions = [];
+$staffStatusFilter = '';
+$staffJabatanFilter = '';
+if ($moduleKey === 'staf') {
+    $staffJabatanOptions = $pdo->query("SELECT DISTINCT jabatan FROM staff WHERE jabatan<>'' ORDER BY jabatan")->fetchAll(PDO::FETCH_COLUMN);
+    $staffStatusFilter = in_array((string)($_GET['status'] ?? ''), ['aktif', 'nonaktif', 'pensiun'], true) ? (string)$_GET['status'] : '';
+    $requestedJabatan = trim((string)($_GET['jabatan'] ?? ''));
+    $staffJabatanFilter = in_array($requestedJabatan, $staffJabatanOptions, true) ? $requestedJabatan : '';
+}
 $selectColumns = array_values(array_unique(array_merge([$pk], $cols, $isEditorialContent ? ['review_status'] : [])));
 $sql = "SELECT `" . implode('`,`', $selectColumns) . "` FROM `$table`";
 $params = [];
@@ -2038,6 +2262,16 @@ if ($isOperatorAuthor && in_array('created_by', $editorialColumns, true)) {
 if ($moduleKey === 'notifikasi') {
     $whereParts[] = '(recipient_user_id=?' . (in_array(current_role(), ['admin', 'operator'], true) ? ' OR recipient_user_id IS NULL' : '') . ')';
     $params[] = (int)($_SESSION['user_id'] ?? 0);
+}
+if ($moduleKey === 'staf') {
+    if ($staffStatusFilter !== '') {
+        $whereParts[] = 'status=?';
+        $params[] = $staffStatusFilter;
+    }
+    if ($staffJabatanFilter !== '') {
+        $whereParts[] = 'jabatan=?';
+        $params[] = $staffJabatanFilter;
+    }
 }
 if ($q !== '') {
     $searchable = array_values(array_filter($cols, fn($c) => !in_array($c, ['id', 'kelas_id', 'wali_guru_id', 'tahun_ajaran_id', 'guru_id', 'siswa_id', 'mapel_id', 'nilai_tugas', 'nilai_ujian', 'aktif'], true)));
@@ -2068,6 +2302,7 @@ foreach ($cols as $col) {
         $staticLabels[$col] = $fields[$col]['options'];
     }
 }
+$canView = can_view_module($moduleKey);
 $canManage = can_manage_module($moduleKey);
 $canCreate = $canManage && $moduleKey !== 'profil_sekolah';
 $canDelete = $canManage && $moduleKey !== 'profil_sekolah';
@@ -2079,7 +2314,7 @@ require __DIR__ . '/includes/header.php';
     <div>
         <h1 class="h3 mb-1"><?= e($pageTitle) ?></h1>
         <p class="text-secondary mb-0"><?= $canManage ? 'Kelola data: tambah, lihat, ubah, atau hapus.' : 'Mode baca saja sesuai hak akses akun.' ?></p>
-    </div><?php if ($canManage && ($canCreate || $moduleKey === 'absensi')): ?><div class="d-flex gap-2"><?php if ($moduleKey === 'absensi'): ?><a class="btn btn-outline-primary" href="bulk_absensi.php">Input Satu Kelas</a><?php endif; ?><?php if ($canCreate): ?><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createRecordModal"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Tambah Data</button><?php endif; ?></div><?php endif; ?>
+    </div><?php if ($moduleKey === 'staf' && $canView): ?><a class="btn btn-outline-primary ms-auto" href="reports.php?type=staf"><i class="bi bi-bar-chart me-1" aria-hidden="true"></i>Laporan Ringkas</a><?php endif; ?><?php if ($canManage && ($canCreate || $moduleKey === 'absensi' || $moduleKey === 'staf')): ?><div class="d-flex flex-wrap gap-2"><?php if ($moduleKey === 'absensi'): ?><a class="btn btn-outline-primary" href="bulk_absensi.php">Input Satu Kelas</a><?php endif; ?><?php if ($moduleKey === 'staf'): ?><a class="btn btn-outline-primary" href="staff_import.php"><i class="bi bi-upload me-1" aria-hidden="true"></i>Impor CSV</a><a class="btn btn-outline-secondary" href="staff_export.php<?= e('?' . http_build_query(array_filter(['q' => $q, 'status' => $staffStatusFilter, 'jabatan' => $staffJabatanFilter], static fn($value): bool => $value !== ''))) ?>"><i class="bi bi-download me-1" aria-hidden="true"></i>Ekspor CSV</a><?php endif; ?><?php if ($canCreate): ?><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createRecordModal"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Tambah Data</button><?php endif; ?></div><?php endif; ?>
 </div>
 <?php if ($moduleKey === 'kelas' && $academicYearCount === 0): ?><div class="alert alert-warning" role="status"><strong>Data kelas belum dapat dibuat.</strong> Belum ada Tahun Ajaran. <?php if ($canManage): ?>Tambahkan tahun ajaran terlebih dahulu, lalu kembali untuk membuat kelas. <a class="alert-link" href="index.php?module=tahun_ajaran&open_add=1">Tambah Tahun Ajaran</a><?php else: ?>Hubungi Operator untuk membuat Tahun Ajaran, lalu kelas dapat ditambahkan.<?php endif; ?></div><?php elseif ($moduleKey === 'mapel' && !$rows && $canCreate): ?><div class="alert alert-info" role="status"><strong>Belum ada data mata pelajaran.</strong> Modul siap digunakan. Pilih <a class="alert-link" href="index.php?module=mapel&open_add=1">Tambah Data</a> untuk mulai mengisi.</div><?php endif; ?>
 <?php if ($canCreate): ?>
@@ -2129,14 +2364,23 @@ require __DIR__ . '/includes/header.php';
 <?php endif; ?>
 <div class="card p-3">
     <form class="row g-2 mb-3 no-print" method="get"><input type="hidden" name="module" value="<?= e($moduleKey) ?>">
-        <div class="col-sm-8 col-md-5"><input class="form-control" name="q" value="<?= e($q) ?>" placeholder="Cari data..."></div>
-        <div class="col-auto"><button class="btn btn-outline-primary">Cari</button> <a class="btn btn-outline-secondary" href="index.php?module=<?= e($moduleKey) ?>">Reset</a></div>
+        <div class="col-12 col-md-5"><input class="form-control" name="q" value="<?= e($q) ?>" placeholder="<?= $moduleKey === 'staf' ? 'Cari nama, NIP, jabatan, unit kerja...' : 'Cari data...' ?>"></div>
+        <?php if ($moduleKey === 'staf'): ?><div class="col-12 col-sm-6 col-md-3"><select class="form-select" name="jabatan" aria-label="Filter jabatan">
+                    <option value="">Semua jabatan</option><?php foreach ($staffJabatanOptions as $position): ?><option value="<?= e($position) ?>" <?= $staffJabatanFilter === $position ? 'selected' : '' ?>><?= e($position) ?></option><?php endforeach; ?>
+                </select></div>
+            <div class="col-12 col-sm-6 col-md-2"><select class="form-select" name="status" aria-label="Filter status">
+                    <option value="">Semua status</option>
+                    <option value="aktif" <?= $staffStatusFilter === 'aktif' ? 'selected' : '' ?>>Aktif</option>
+                    <option value="nonaktif" <?= $staffStatusFilter === 'nonaktif' ? 'selected' : '' ?>>Nonaktif</option>
+                    <option value="pensiun" <?= $staffStatusFilter === 'pensiun' ? 'selected' : '' ?>>Pensiun</option>
+                </select></div><?php endif; ?>
+        <div class="col-12 col-md-auto"><button class="btn btn-outline-primary">Cari / Filter</button> <a class="btn btn-outline-secondary" href="index.php?module=<?= e($moduleKey) ?>">Reset</a></div>
     </form>
     <div class="table-responsive">
         <table class="table table-striped table-hover align-middle">
             <thead class="table-light">
                 <tr>
-                    <th>No.</th><?php foreach ($cols as $col): ?><th><?= e($fields[$col]['label'] ?? field_label($col)) ?></th><?php endforeach; ?><?php if ($canManage): ?><th class="no-print">Aksi</th><?php endif; ?>
+                    <th>No.</th><?php foreach ($cols as $col): ?><th><?= e($fields[$col]['label'] ?? field_label($col)) ?></th><?php endforeach; ?><th class="no-print">Aksi</th>
                 </tr>
             </thead>
             <tbody>
@@ -2144,7 +2388,7 @@ require __DIR__ . '/includes/header.php';
                     <tr>
                         <?php // Tampilkan langkah awal yang relevan supaya daftar kosong tidak disalahartikan sebagai modul mati.
                         ?>
-                        <td colspan="<?= count($cols) + ($canManage ? 2 : 1) ?>" class="text-center text-secondary py-4"><?php if ($moduleKey === 'kelas' && $academicYearCount === 0): ?>Belum ada kelas karena Tahun Ajaran belum dibuat. <?= $canManage ? 'Tambahkan Tahun Ajaran lebih dahulu.' : 'Hubungi Operator untuk menambah Tahun Ajaran.' ?><?php elseif ($moduleKey === 'mapel' && $canCreate): ?>Belum ada mata pelajaran. Gunakan tombol Tambah Data untuk mulai mengisi.<?php elseif ($moduleKey === 'mapel'): ?>Belum ada data mata pelajaran. Silakan hubungi Operator untuk melengkapinya.<?php else: ?>Belum ada data.<?php endif; ?></td>
+                        <td colspan="<?= count($cols) + 2 ?>" class="text-center text-secondary py-4"><?php if ($moduleKey === 'kelas' && $academicYearCount === 0): ?>Belum ada kelas karena Tahun Ajaran belum dibuat. <?= $canManage ? 'Tambahkan Tahun Ajaran lebih dahulu.' : 'Hubungi Operator untuk menambah Tahun Ajaran.' ?><?php elseif ($moduleKey === 'mapel' && $canCreate): ?>Belum ada mata pelajaran. Gunakan tombol Tambah Data untuk mulai mengisi.<?php elseif ($moduleKey === 'mapel'): ?>Belum ada data mata pelajaran. Silakan hubungi Operator untuk melengkapinya.<?php else: ?>Belum ada data.<?php endif; ?></td>
                     </tr>
                     <?php else: foreach ($rows as $i => $row): ?>
                         <tr>
@@ -2152,8 +2396,8 @@ require __DIR__ . '/includes/header.php';
                             <?php foreach ($cols as $col): $cell = $row[$col] ?? null;
                                 if (isset($relationLabels[$col])) $cell = $relationLabels[$col][(string)$cell] ?? $cell;
                                 elseif (isset($staticLabels[$col])) $cell = $staticLabels[$col][(string)$cell] ?? $cell; ?><td><?= e($cell ?? '-') ?><?php if ($isEditorialContent && $col === 'status' && isset($row['review_status']) && $row['review_status'] !== 'Disetujui'): ?><br><span class="badge text-bg-warning mt-1"><?= e($row['review_status']) ?></span><?php endif; ?></td><?php endforeach; ?>
-                            <?php if ($canManage): ?><td class="no-print text-nowrap"><a class="btn btn-sm btn-outline-primary" href="index.php?module=<?= e($moduleKey) ?>&action=edit&id=<?= (int)$row[$pk] ?>">Edit</a>
-                                    <?php if ($canDelete): ?><form class="d-inline" method="post" action="index.php?module=<?= e($moduleKey) ?>&action=delete&id=<?= (int)$row[$pk] ?>" onsubmit="return confirm('Yakin ingin menghapus data ini?')"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><button class="btn btn-sm btn-outline-danger">Hapus</button></form><?php endif; ?></td><?php endif; ?>
+                            <td class="no-print text-nowrap"><a class="btn btn-sm btn-outline-secondary" href="index.php?module=<?= e($moduleKey) ?>&amp;action=view&amp;id=<?= (int)$row[$pk] ?>" aria-label="Lihat data"><i class="bi bi-eye" aria-hidden="true"></i><span class="d-none d-lg-inline ms-1">Lihat</span></a><?php if ($canManage): ?> <a class="btn btn-sm btn-outline-primary" href="index.php?module=<?= e($moduleKey) ?>&amp;action=edit&amp;id=<?= (int)$row[$pk] ?>" aria-label="Edit data"><i class="bi bi-pencil" aria-hidden="true"></i><span class="d-none d-lg-inline ms-1">Edit</span></a><?php endif; ?>
+                                <?php if ($canDelete): ?><form class="d-inline" method="post" action="index.php?module=<?= e($moduleKey) ?>&amp;action=delete&amp;id=<?= (int)$row[$pk] ?>" onsubmit="return confirm('Yakin ingin menghapus data ini?')"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>"><button class="btn btn-sm btn-outline-danger" type="submit" aria-label="Hapus data"><i class="bi bi-trash" aria-hidden="true"></i><span class="d-none d-lg-inline ms-1">Hapus</span></button></form><?php endif; ?></td>
                         </tr><?php endforeach;
                         endif; ?>
             </tbody>
@@ -2161,7 +2405,7 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div class="small text-secondary">Menampilkan <?= $totalRows ? $offset + 1 : 0 ?>–<?= min($offset + $perPage, $totalRows) ?> dari <?= $totalRows ?> data.</div><?php if ($pageCount > 1): ?><nav aria-label="Halaman data">
-                <ul class="pagination pagination-sm mb-0"><?php for ($pageNumber = max(1, $page - 2); $pageNumber <= min($pageCount, $page + 2); $pageNumber++): ?><li class="page-item<?= $pageNumber === $page ? ' active' : '' ?>"><a class="page-link" href="index.php?<?= e(http_build_query(['module' => $moduleKey, 'q' => $q, 'page' => $pageNumber])) ?>"><?= $pageNumber ?></a></li><?php endfor; ?></ul>
+                <ul class="pagination pagination-sm mb-0"><?php for ($pageNumber = max(1, $page - 2); $pageNumber <= min($pageCount, $page + 2); $pageNumber++): ?><li class="page-item<?= $pageNumber === $page ? ' active' : '' ?>"><a class="page-link" href="index.php?<?= e(http_build_query(array_filter(['module' => $moduleKey, 'q' => $q, 'status' => $staffStatusFilter, 'jabatan' => $staffJabatanFilter, 'page' => $pageNumber], static fn($value): bool => $value !== ''))) ?>"><?= $pageNumber ?></a></li><?php endfor; ?></ul>
             </nav><?php endif; ?>
     </div>
 </div>

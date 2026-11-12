@@ -74,9 +74,9 @@ $shouldNoIndex = $isLocalPortalHost || in_array(basename((string) ($_SERVER['PHP
             <button class="nav-toggle" type="button" aria-label="Buka navigasi" aria-expanded="false" aria-controls="publicNavigation">
                 <i class="bi bi-list"></i></button>
             <nav class="main-nav" id="publicNavigation" aria-label="Navigasi utama">
-                <a class="<?= $activePage === 'home' ? 'active' : '' ?>" href="index.php">Beranda</a>
+                <a class="<?= $activePage === 'home' ? 'active' : '' ?>" href="index.php" aria-label="Beranda portal sekolah">Beranda</a>
                 <details class="nav-dropdown">
-                    <summary class="<?= in_array($activePage, ['profil', 'guru', 'sejarah', 'visi-misi', 'struktur', 'fasilitas'], true) ? 'active' : '' ?>">Profil <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
+                    <summary class="<?= in_array($activePage, ['profil', 'guru', 'sejarah', 'visi-misi', 'struktur', 'fasilitas'], true) ? 'active' : '' ?>" aria-label="Menu Profil Sekolah">Profil Sekolah <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
                     <div class="nav-dropdown-menu">
                         <a href="profil.php#schoolAboutTitle"><i class="bi bi-people-fill" aria-hidden="true"></i><span>Tentang sekolah</span></a>
                         <a href="profil.php#schoolIdentityTitle"><i class="bi bi-card-list" aria-hidden="true"></i><span>Identitas sekolah</span></a>
@@ -90,7 +90,7 @@ $shouldNoIndex = $isLocalPortalHost || in_array(basename((string) ($_SERVER['PHP
                     </div>
                 </details>
                 <details class="nav-dropdown">
-                    <summary class="<?= in_array($activePage, ['akademik', 'kurikulum', 'jadwal', 'ekstrakurikuler'], true) ? 'active' : '' ?>">Akademik <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
+                    <summary class="<?= in_array($activePage, ['akademik', 'kurikulum', 'jadwal', 'ekstrakurikuler'], true) ? 'active' : '' ?>" aria-label="Menu Program Akademik">Akademik <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
                     <div class="nav-dropdown-menu">
                         <a href="akademik.php"><i class="bi bi-journal-bookmark-fill" aria-hidden="true"></i><span>Ringkasan akademik</span></a>
                         <a href="kurikulum.php"><i class="bi bi-book-half" aria-hidden="true"></i><span>Kurikulum</span></a>
@@ -102,31 +102,32 @@ $shouldNoIndex = $isLocalPortalHost || in_array(basename((string) ($_SERVER['PHP
                     </div>
                 </details>
                 <details class="nav-dropdown">
-                    <summary class="<?= in_array($activePage, ['berita', 'pengumuman', 'agenda', 'prestasi'], true) ? 'active' : '' ?>">Informasi <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
+                    <summary class="<?= in_array($activePage, ['berita', 'pengumuman', 'agenda', 'prestasi'], true) ? 'active' : '' ?>">Blog &amp; Artikel <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
                     <div class="nav-dropdown-menu">
-                        <a href="berita.php"><i class="bi bi-newspaper" aria-hidden="true"></i><span>Berita sekolah</span></a>
+                        <a href="berita.php"><i class="bi bi-newspaper" aria-hidden="true"></i><span>Blog &amp; berita sekolah</span></a>
                         <a href="pengumuman.php"><i class="bi bi-megaphone-fill" aria-hidden="true"></i><span>Pengumuman</span></a>
                         <a href="agenda.php"><i class="bi bi-calendar-event-fill" aria-hidden="true"></i><span>Agenda kegiatan</span></a>
                         <a href="prestasi.php"><i class="bi bi-award-fill" aria-hidden="true"></i><span>Prestasi sekolah</span></a>
                     </div>
                 </details>
-                <a class="<?= $activePage === 'galeri' ? 'active' : '' ?>" href="galeri.php">Galeri</a>
-                <a class="<?= $activePage === 'unduhan' ? 'active' : '' ?>" href="unduhan.php">Unduhan</a>
+                <a class="<?= $activePage === 'galeri' ? 'active' : '' ?>" href="galeri.php" aria-label="Galeri dokumentasi sekolah">Galeri &amp; Media</a>
                 <details class="nav-dropdown">
-                    <summary class="<?= $activePage === 'ppdb' ? 'active' : '' ?>">PPDB / SPMB <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
+                    <summary class="<?= in_array($activePage, ['ppdb', 'unduhan', 'cek_pendaftaran', 'hasil-seleksi'], true) ? 'active' : '' ?>">PPDB / SPMB <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
                     <div class="nav-dropdown-menu">
                         <a href="ppdb.php#informasi-ppdb"><i class="bi bi-info-circle-fill" aria-hidden="true"></i><span>Informasi dan jadwal</span></a>
                         <a href="ppdb.php#persyaratan"><i class="bi bi-file-earmark-check-fill" aria-hidden="true"></i><span>Persyaratan</span></a>
                         <a href="ppdb.php#formulir"><i class="bi bi-pencil-square" aria-hidden="true"></i><span>Isi formulir</span></a>
+                        <a href="unduhan.php"><i class="bi bi-file-earmark-arrow-down-fill" aria-hidden="true"></i><span>Unduhan &amp; dokumen</span></a>
                         <a href="cek_pendaftaran.php"><i class="bi bi-search" aria-hidden="true"></i><span>Cek status pendaftaran</span></a>
                         <a href="hasil-seleksi.php"><i class="bi bi-clipboard2-check-fill" aria-hidden="true"></i><span>Hasil seleksi</span></a>
                     </div>
                 </details>
+                <a class="<?= $activePage === 'faq' ? 'active' : '' ?>" href="faq.php">FAQ</a>
                 <a class="<?= $activePage === 'kontak' ? 'active' : '' ?>" href="kontak.php">Kontak</a>
                 <a class="nav-search-link <?= $activePage === 'pencarian' ? 'active' : '' ?>" href="pencarian.php" aria-label="Pencarian"><i class="bi bi-search" aria-hidden="true"></i><span class="nav-search-label">Cari</span></a>
             </nav>
             <a class="staff-link" href="../login.php">
-                <i class="bi bi-box-arrow-in-right"></i> SIMS</a>
+                <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Login</a>
         </div>
     </header>
     <main id="pageContent" tabindex="-1">

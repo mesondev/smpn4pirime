@@ -15,6 +15,10 @@ date_default_timezone_set('Asia/Jayapura');
 
 $projectRoot = realpath(dirname(__DIR__));
 $backupPath = trim((string)(getenv('SIMS_BACKUP_DIR') ?: ''));
+if ($backupPath === '' && PHP_OS_FAMILY === 'Windows') {
+    $userProfile = trim((string)(getenv('USERPROFILE') ?: ''));
+    if ($userProfile !== '') $backupPath = $userProfile . DIRECTORY_SEPARATOR . 'Documents' . DIRECTORY_SEPARATOR . 'SIMS_Backups';
+}
 $environment = strtolower((string)(getenv('SIMS_APP_ENV') ?: 'local'));
 $databaseHost = (string)(getenv('SIMS_DB_HOST') ?: '127.0.0.1');
 $databasePort = (int)(getenv('SIMS_DB_PORT') ?: 3306);
@@ -34,7 +38,7 @@ if (!preg_match('/^[A-Za-z0-9_]+$/', $databaseName)) $fail('Nama database pada k
 if (!filter_var($databasePort, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]])) {
     $fail('Port database tidak valid.');
 }
-if (!$zipAvailable) $fail('Aktifkan ekstensi PHP zip pada PHP Laragon.');
+if (!$zipAvailable) $fail('Aktifkan ekstensi PHP zip pada instalasi PHP XAMPP.');
 
 if (!is_dir($backupPath) && !mkdir($backupPath, 0700, true) && !is_dir($backupPath)) {
     $fail('Folder backup tidak dapat dibuat. Periksa SIMS_BACKUP_DIR dan hak aksesnya.');
@@ -50,12 +54,13 @@ if (str_starts_with($backupNormalized, $projectPrefix)) {
 
 $dumpPath = trim((string)(getenv('SIMS_MYSQLDUMP') ?: ''));
 if ($dumpPath === '') {
-    $candidates = glob('C:/laragon/bin/mysql/mysql-*/bin/mysqldump.exe') ?: [];
+    $candidates = glob('C:/xampp/mysql/bin/mysqldump.exe') ?: [];
+    if (!$candidates) $candidates = glob('C:/laragon/bin/mysql/mysql-*/bin/mysqldump.exe') ?: [];
     rsort($candidates, SORT_NATURAL);
     $dumpPath = (string)($candidates[0] ?? '');
 }
 if ($dumpPath === '' || !is_file($dumpPath)) {
-    $fail('mysqldump tidak ditemukan. Atur SIMS_MYSQLDUMP ke executable Laragon.');
+    $fail('mysqldump tidak ditemukan. Atur SIMS_MYSQLDUMP ke executable XAMPP atau MySQL yang aktif.');
 }
 
 try {
@@ -67,13 +72,21 @@ try {
     );
     $pdo->query('SELECT 1');
 } catch (Throwable $exception) {
-    $fail('Koneksi ke database yang dikonfigurasi gagal. Periksa layanan Laragon dan SIMS_DB_*.', 2);
+    $fail('Koneksi ke database yang dikonfigurasi gagal. Periksa layanan MySQL XAMPP dan SIMS_DB_*.', 2);
 }
 
 if (in_array('--check', $argv, true)) {
     fwrite(STDOUT, "Pemeriksaan backup lulus.\nDatabase: {$databaseName}\nFolder backup: {$backupRoot}\nmysqldump: {$dumpPath}\n" );
     exit(0);
 }
+
+$backupLockPath = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'sims_backup_' . hash('sha256', strtolower($backupRoot)) . '.lock';
+$backupLock = @fopen($backupLockPath, 'c');
+if (!is_resource($backupLock) || !flock($backupLock, LOCK_EX | LOCK_NB)) {
+    if (is_resource($backupLock)) fclose($backupLock);
+    $fail('Backup lain sedang berjalan. Tunggu sampai selesai, lalu coba kembali.', 4);
+}
+@chmod($backupLockPath, 0600);
 
 $timestamp = date('Ymd_His');
 $runDirectory = $backupRoot . DIRECTORY_SEPARATOR . 'sims_' . $timestamp . '_' . bin2hex(random_bytes(3));
@@ -197,4 +210,8 @@ try {
     exit(3);
 } finally {
     if (is_file($optionFile)) @unlink($optionFile);
+    if (is_resource($backupLock)) {
+        flock($backupLock, LOCK_UN);
+        fclose($backupLock);
+    }
 }

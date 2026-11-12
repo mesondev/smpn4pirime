@@ -1,0 +1,45 @@
+/* Shared finishing layer for consistent controls across application modules. */
+:root {
+    --ui-radius-card: 16px;
+    --ui-radius-control: 10px;
+}
+
+:where(.app-layout) :where(.card, .dashboard-card, .section-card, .panel-card) {
+    border-radius: var(--ui-radius-card);
+}
+
+:where(.app-layout) :where(button, input, select, textarea, .form-control, .form-select, .btn) {
+    border-radius: var(--ui-radius-control);
+}
+
+:where(.app-layout) :where(input, select, textarea, .form-control, .form-select):focus {
+    border-color: #6d9df5;
+    box-shadow: 0 0 0 .2rem rgb(59 130 246 / 14%);
+}
+
+:where(.app-layout) :where(button, .btn, a.sidebar-link, a.student-kpi-card) {
+    transition: color .16s ease, background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+:where(.app-layout) :where(button, .btn):focus-visible,
+:where(.app-layout) a:focus-visible {
+    outline: 3px solid rgb(59 130 246 / 55%);
+    outline-offset: 2px;
+}
+
+:where(.app-layout) :where(table.table) thead th {
+    vertical-align: middle;
+}
+
+:where(.app-layout) :where(.alert) {
+    border-radius: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :where(.app-layout) * {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

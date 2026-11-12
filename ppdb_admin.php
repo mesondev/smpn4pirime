@@ -32,12 +32,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $current = $find->fetch();
                 if (!$current) {
                     throw new DomainException('Permohonan PPDB tidak ditemukan.');
+
                 }
                 $update = $pdo->prepare('UPDATE ppdb_pendaftar SET status=?,catatan_publik=? WHERE id=?');
                 $update->execute([$newStatus, $publicNote !== '' ? $publicNote : null, $applicantId]);
                 $history = $pdo->prepare(
                     'INSERT INTO ppdb_status_history (pendaftar_id,status_sebelumnya,status_baru,catatan,actor_user_id)
                      VALUES (?,?,?,?,?)'
+
                 );
                 $history->execute([
                     $applicantId,
@@ -46,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $publicNote !== '' ? $publicNote : null,
                     (int) ($_SESSION['user_id'] ?? 0),
                 ]);
+                
                 $pdo->commit();
                 record_activity($pdo, 'memperbarui status permohonan PPDB', 'ppdb_pendaftar', $applicantId, $newStatus);
                 flash('Status permohonan dan riwayatnya berhasil disimpan.');

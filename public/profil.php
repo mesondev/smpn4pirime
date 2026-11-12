@@ -4,6 +4,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/_common.php';
 require_once __DIR__ . '/_public_sections.php';
 $portalProfile = portal_profile($pdo);
+$publicLeaders = portal_public_school_leaders($pdo);
+$greetingApproved = portal_schema_ready($pdo, 'profil_sekolah', ['sambutan', 'sambutan_status'])
+    && strtolower((string)($portalProfile['sambutan_status'] ?? '')) === 'resmi';
+$profileStructure = portal_schema_ready($pdo, 'portal_struktur_sekolah', ['id', 'nama', 'jabatan', 'status', 'urutan'])
+    ? portal_rows($pdo, "SELECT nama,jabatan FROM portal_struktur_sekolah WHERE status='Terbit' ORDER BY urutan,nama LIMIT 4") : [];
+$profileFacilities = portal_schema_ready($pdo, 'portal_fasilitas', ['id', 'nama', 'status', 'urutan'])
+    ? portal_rows($pdo, "SELECT id,nama FROM portal_fasilitas WHERE status='Terbit' ORDER BY urutan,nama LIMIT 4") : [];
 $pageTitle = 'Profil Sekolah';
 $activePage = 'profil';
 $misiItems = preg_split('/\R+/u', trim((string)$portalProfile['misi']), -1, PREG_SPLIT_NO_EMPTY) ?: [];
@@ -47,12 +54,7 @@ require __DIR__ . '/_header.php';
             <div class="school-about-copy">
                 <span class="kicker">Tentang sekolah</span>
                 <h2 id="schoolAboutTitle"><?= e($portalProfile['nama']) ?></h2>
-                <div class="read-more-group" data-read-more-group>
-                    <p>SMP Negeri 4 Pirime merupakan lembaga pendidikan formal tingkat Sekolah Menengah Pertama yang berstatus negeri dan berada di Distrik Pirime, Kabupaten Lanny Jaya, Provinsi Papua Pegunungan.</p>
-                    <p>Sekolah melayani pendidikan bagi generasi muda di wilayah Pirime dan sekitarnya.</p>
-                    <p>Lingkungan sekolah mendukung peserta didik memperoleh pengetahuan, mengembangkan keterampilan, membangun karakter, dan mempersiapkan diri untuk melanjutkan pendidikan.</p>
-                    <p>Melalui pembelajaran, pembinaan karakter, dan pengembangan potensi, sekolah berupaya berkontribusi bagi kualitas sumber daya manusia di Kabupaten Lanny Jaya.</p>
-                </div>
+                <div class="read-more-group" data-read-more-group><p>Halaman ini memuat identitas, arah pendidikan, sejarah, kepemimpinan, dan informasi lingkungan sekolah yang telah disediakan untuk publik.</p><p>Informasi yang belum tercatat atau belum disahkan akan ditandai dengan jelas dan tidak diisi berdasarkan perkiraan.</p></div>
             </div>
             <aside class="school-about-visual" aria-label="Identitas SMP Negeri 4 Pirime">
                 <span class="about-visual-glow" aria-hidden="true"></span>
@@ -85,6 +87,33 @@ require __DIR__ . '/_header.php';
                 </table>
             </div>
             <p class="school-source-note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i><span>Nama, NPSN, alamat, kampung, distrik, kabupaten, provinsi, status, dan jenjang merujuk pada <a href="https://referensi.data.kemendikdasmen.go.id/residu/satuanpendidikan/detail/60303637" target="_blank" rel="noopener noreferrer">Data Pendidikan Kemendikdasmen</a>. Kode pos belum dicantumkan karena belum tersedia pada data rujukan yang diperiksa.</span></p>
+        </section>
+
+        <section class="school-leadership-section" aria-labelledby="school-leadership-title">
+            <div class="school-section-heading"><div><span class="kicker">Pimpinan sekolah</span><h2 id="school-leadership-title">Sambutan Kepala Sekolah</h2><p>Informasi pimpinan dan sambutan resmi sekolah.</p></div></div>
+            <article class="school-info-card school-leadership-card" id="kepala-sekolah"><span class="school-info-icon"><i class="bi bi-person-badge-fill" aria-hidden="true"></i></span>
+                    <div class="school-info-title">
+                        <div><span class="kicker">Pimpinan sekolah</span>
+                            <h3>Kepala Sekolah</h3>
+                        </div>
+                    </div>
+                    <?php if ($publicLeaders): ?><div class="school-leadership-list"><?php foreach ($publicLeaders as $leader): $leaderPhoto = portal_image($leader['foto_url'] ?? '', 'struktur', (int)$leader['id']); ?><article><?php if ($leaderPhoto): ?><img src="<?= e($leaderPhoto) ?>" alt="Foto <?= e($leader['nama']) ?>" loading="lazy" decoding="async"><?php endif; ?><div><strong><?= e($leader['nama']) ?></strong><span><?= e($leader['jabatan']) ?></span></div></article><?php endforeach; ?></div><?php else: ?><p class="school-empty-copy">Nama, jabatan, dan foto pimpinan akan ditampilkan setelah data struktur organisasi disetujui untuk publikasi.</p><?php endif; ?>
+                    <?php if ($greetingApproved && trim((string)$portalProfile['sambutan']) !== ''): ?><p><?= nl2br(e($portalProfile['sambutan'])) ?></p><?php else: ?><p class="school-empty-copy">Sambutan resmi kepala sekolah belum diterbitkan atau belum memiliki status persetujuan. Naskah tersimpan tidak ditampilkan sebagai informasi resmi.</p><?php endif; ?><a class="text-link" href="guru.php">Lihat direktori guru <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                </article>
+        </section>
+
+        <section class="school-history-card" aria-labelledby="schoolHistoryTitle">
+            <div class="school-history-icon"><i class="bi bi-book-half" aria-hidden="true"></i></div>
+            <div>
+                <div class="school-history-heading">
+                    <div><span class="kicker">Perjalanan sekolah</span>
+                        <h2 id="schoolHistoryTitle">Sejarah Singkat</h2>
+                    </div><span class="school-status <?= e($sejarahStatus) ?>"><?= e($statusLabels[$sejarahStatus] ?? 'Perlu verifikasi') ?></span>
+                </div>
+                <?php if (trim((string)$portalProfile['sejarah']) !== '' && $sejarahStatus === 'resmi'): ?><div class="school-history-copy"><?= nl2br(e($portalProfile['sejarah'])) ?></div>
+                <?php elseif (trim((string)$portalProfile['sejarah']) !== ''): ?><p class="school-empty-copy">Ada riwayat yang tersimpan, tetapi belum ditayangkan karena menunggu pencocokan dengan SK pendirian, arsip sekolah, atau keterangan resmi Kepala Sekolah.</p>
+                <?php else: ?><p class="school-empty-copy">Sejarah berdirinya SMP Negeri 4 Pirime akan ditambahkan setelah tahun pendirian dan riwayat sekolah dicocokkan dengan SK pendirian, arsip sekolah, atau keterangan resmi Kepala Sekolah. Informasi sejarah tidak dibuat berdasarkan perkiraan.</p><?php endif; ?>
+            </div>
         </section>
 
         <section class="school-direction-grid" id="visi-misi" aria-label="Arah pendidikan sekolah">
@@ -124,26 +153,17 @@ require __DIR__ . '/_header.php';
             <div class="school-section-heading">
                 <div><span class="kicker">Informasi pendukung</span>
                     <h2 id="schoolMoreTitle">Kenali lingkungan sekolah</h2>
-                    <p>Informasi berikut akan dilengkapi setelah data dan dokumen pendukung disetujui sekolah.</p>
+                    <p>Bagian ini menampilkan ringkasan data yang sudah diterbitkan; data yang belum disahkan tidak ditampilkan.</p>
                 </div>
             </div>
             <div class="school-more-grid">
-                <article class="school-info-card school-leadership-card" id="kepala-sekolah"><span class="school-info-icon"><i class="bi bi-person-badge-fill" aria-hidden="true"></i></span>
-                    <div class="school-info-title">
-                        <div><span class="kicker">Pimpinan sekolah</span>
-                            <h3>Kepala Sekolah dan Guru</h3>
-                        </div>
-                    </div>
-                    <div class="school-staff-photo-grid"><?php foreach (public_school_staff_images() as $index => $staffImage): ?><img src="<?= e($staffImage['src']) ?>" alt="<?= e($staffImage['alt']) ?>" loading="lazy" decoding="async"><?php endforeach; ?></div>
-                    <p class="school-empty-copy">Foto bersumber dari folder aset sambutan sekolah. Nama serta jabatan pada foto menunggu konfirmasi sebelum dicantumkan.</p><a class="text-link" href="guru.php">Lihat direktori guru <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
-                </article>
                 <article class="school-info-card" id="struktur-organisasi"><span class="school-info-icon"><i class="bi bi-diagram-3-fill" aria-hidden="true"></i></span>
                     <div class="school-info-title">
                         <div><span class="kicker">Tata kelola</span>
                             <h3>Struktur Organisasi</h3>
                         </div>
                     </div>
-                    <p class="school-empty-copy">Bagan organisasi akan dimuat setelah susunan tugas dan pejabat sekolah dikonfirmasi.</p>
+                    <?php if ($profileStructure): ?><ul class="school-objectives-list"><?php foreach ($profileStructure as $member): ?><li><strong><?= e($member['jabatan']) ?></strong> · <?= e($member['nama']) ?></li><?php endforeach; ?></ul><?php else: ?><p class="school-empty-copy">Susunan organisasi akan ditampilkan setelah data jabatan disetujui untuk publikasi.</p><?php endif; ?><a class="text-link" href="struktur.php">Lihat struktur lengkap <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
                 </article>
                 <article class="school-info-card" id="sarana-prasarana"><span class="school-info-icon"><i class="bi bi-buildings-fill" aria-hidden="true"></i></span>
                     <div class="school-info-title">
@@ -151,24 +171,11 @@ require __DIR__ . '/_header.php';
                             <h3>Sarana dan Prasarana</h3>
                         </div>
                     </div>
-                    <p class="school-empty-copy">Daftar fasilitas dan dokumentasinya akan ditambahkan setelah inventaris sekolah diperiksa.</p>
+                    <?php if ($profileFacilities): ?><ul class="school-objectives-list"><?php foreach ($profileFacilities as $facility): ?><li><?= e($facility['nama']) ?></li><?php endforeach; ?></ul><?php else: ?><p class="school-empty-copy">Daftar fasilitas aktual akan ditampilkan setelah inventaris sekolah diperiksa.</p><?php endif; ?><a class="text-link" href="fasilitas.php">Lihat fasilitas <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
                 </article>
             </div>
         </section>
 
-        <section class="school-history-card" aria-labelledby="schoolHistoryTitle">
-            <div class="school-history-icon"><i class="bi bi-book-half" aria-hidden="true"></i></div>
-            <div>
-                <div class="school-history-heading">
-                    <div><span class="kicker">Perjalanan sekolah</span>
-                        <h2 id="schoolHistoryTitle">Sejarah Singkat</h2>
-                    </div><span class="school-status <?= e($sejarahStatus) ?>"><?= e($statusLabels[$sejarahStatus] ?? 'Perlu verifikasi') ?></span>
-                </div>
-                <?php if (trim((string)$portalProfile['sejarah']) !== '' && $sejarahStatus === 'resmi'): ?><div class="school-history-copy"><?= nl2br(e($portalProfile['sejarah'])) ?></div>
-                <?php elseif (trim((string)$portalProfile['sejarah']) !== ''): ?><p class="school-empty-copy">Ada riwayat yang tersimpan, tetapi belum ditayangkan karena menunggu pencocokan dengan SK pendirian, arsip sekolah, atau keterangan resmi Kepala Sekolah.</p>
-                <?php else: ?><p class="school-empty-copy">Sejarah berdirinya SMP Negeri 4 Pirime akan ditambahkan setelah tahun pendirian dan riwayat sekolah dicocokkan dengan SK pendirian, arsip sekolah, atau keterangan resmi Kepala Sekolah. Informasi sejarah tidak dibuat berdasarkan perkiraan.</p><?php endif; ?>
-            </div>
-        </section>
 
         <section class="school-profile-contact" aria-label="Kontak dan lokasi sekolah">
             <div><span class="kicker">Perlu informasi lebih lanjut?</span><strong>Hubungi SMP Negeri 4 Pirime</strong></div>

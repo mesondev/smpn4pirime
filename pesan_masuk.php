@@ -34,63 +34,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($reply === '' || mb_strlen($reply, 'UTF-8') > 10000) {
             $error = 'Balasan wajib diisi dan maksimal 10.000 karakter.';
         } else {
-            // Simpan balasan terlebih dahulu agar tetap tercatat jika email gagal.
-            $insertReply = $pdo->prepare(
-                "INSERT INTO pesan_kontak_balasan
-                    (pesan_id, pengirim, admin_user_id, isi, status_email)
-                 VALUES (?, 'admin', ?, ?, 'menunggu')"
-            );
-            $insertReply->execute([
-                $selectedId,
-                (int) ($_SESSION['user_id'] ?? 0),
-                $reply,
-            ]);
+            try {
+                $pdo->beginTransaction();
+                $insertReply = $pdo->prepare(
+                    "INSERT INTO pesan_kontak_balasan
+                        (pesan_id, pengirim, admin_user_id, isi, status_email)
+                     VALUES (?, 'admin', ?, ?, 'menunggu')"
+                );
+                $insertReply->execute([$selectedId, (int) ($_SESSION['user_id'] ?? 0), $reply]);
+                $replyId = (int) $pdo->lastInsertId();
+                $updateThread = $pdo->prepare("UPDATE pesan_kontak SET status='dibalas', dibaca_admin=1 WHERE id=?");
+                $updateThread->execute([$selectedId]);
 
-            $replyId = (int) $pdo->lastInsertId();
-            $updateThread = $pdo->prepare(
-                "UPDATE pesan_kontak
-                 SET status = 'dibalas', dibaca_admin = 1
-                 WHERE id = ?"
-            );
-            $updateThread->execute([$selectedId]);
-
-            // Catat aktivitas untuk audit pengelolaan pesan publik.
-            record_activity(
-                $pdo,
-                'membalas pesan kontak publik',
-                'pesan_kontak',
-                $selectedId,
-                'Balasan dikirim melalui email jika layanan email aktif.'
-            );
-
-            // Rangkai email dengan identitas resmi sekolah.
-            $emailBody = "Halo {$target['nama_pengirim']},\r\n\r\n"
-                . "Admin Utama SMP Negeri 4 Pirime membalas pesan Anda tentang: "
-                . "{$target['subjek']}\r\n\r\n"
-                . $reply . "\r\n\r\n"
-                . "Salam,\r\nAdmin Utama\r\nSMP Negeri 4 Pirime\r\n"
-                . "Telepon: 08134893823\r\nEmail: smpn4pirime@gmail.com\r\n";
-
-            $emailSent = send_school_contact_reply(
-                (string) $target['email_pengirim'],
-                'Balasan sekolah: ' . (string) $target['subjek'],
-                $emailBody
-            );
-            $emailStatus = $emailSent ? 'terkirim' : 'gagal';
-
-            // Simpan hasil pengiriman agar status email terlihat pada percakapan.
-            $updateReply = $pdo->prepare(
-                'UPDATE pesan_kontak_balasan SET status_email = ? WHERE id = ?'
-            );
-            $updateReply->execute([$emailStatus, $replyId]);
-
-            flash(
-                $emailSent
-                    ? 'Balasan tersimpan dan diteruskan ke email pengirim.'
-                    : 'Balasan tersimpan, tetapi email gagal dikirim. Periksa konfigurasi layanan email server.',
-                $emailSent ? 'success' : 'warning'
-            );
-            redirect('index.php?module=pesan_masuk&id=' . $selectedId);
+                $emailBody = "Halo {$target['nama_pengirim']},\r\n\r\n"
+                    . "Admin Utama SMP Negeri 4 Pirime membalas pesan Anda tentang: {$target['subjek']}\r\n\r\n"
+                    . $reply . "\r\n\r\nSalam,\r\nAdmin Utama\r\nSMP Negeri 4 Pirime\r\n"
+                    . "Telepon: 08134893823\r\nEmail: smpn4pirime@gmail.com\r\n";
+                $queue = $pdo->prepare('INSERT INTO outbound_email_queue (reply_id,recipient,subject,body) VALUES (?,?,?,?)');
+                $queue->execute([$replyId, (string)$target['email_pengirim'], 'Balasan sekolah: ' . (string)$target['subjek'], $emailBody]);
+                record_activity($pdo, 'membalas pesan kontak publik', 'pesan_kontak', $selectedId, 'Balasan tersimpan dan masuk antrean email.');
+                $pdo->commit();
+                flash('Balasan tersimpan dan masuk antrean. Pengiriman email berjalan melalui worker XAMPP; statusnya diperbarui setelah diproses.', 'success');
+                redirect('index.php?module=pesan_masuk&id=' . $selectedId);
+            } catch (Throwable $exception) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                app_log('error', 'Contact reply queue insert failed', ['type' => get_class($exception)]);
+                $error = 'Balasan gagal disimpan ke antrean. Silakan coba kembali.';
+            }
         }
     } elseif (in_array($action, ['tutup', 'buka_kembali'], true)) {
         // Ubah status percakapan tanpa menghapus isi pesan atau balasan.

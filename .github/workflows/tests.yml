@@ -27,9 +27,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Validate Composer configuration
-        run: composer validate --no-check-publish
-
       - name: Start server and run automated tests
         env:
           SIMS_TEST_HTTP: '1'
@@ -74,4 +71,4 @@ jobs:
           fi
 
           echo "PHP test server is ready."
-          composer test
+          php tests/run.php

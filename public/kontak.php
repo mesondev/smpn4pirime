@@ -7,6 +7,9 @@ $contactPhone = portal_phone_uri($portalProfile['telepon'] ?? null);
 $contactEmail = portal_email_address($portalProfile['email'] ?? null);
 require __DIR__ . '/_header.php';
 $configuredMap = trim((string)($portalProfile['peta_url'] ?? ''));
+if ($configuredMap === '') {
+    $configuredMap = 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3788.538844885933!2d138.5360632747575!3d-3.9588897443876467!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x683df3ba817309b9%3A0x1ba07ba15f884948!2sSMP%20NEGERI%204%20PIRIME!5e1!3m2!1sid!2sid!4v1794491671370!5m2!1sid!2sid';
+}
 $mapParts = $configuredMap !== '' ? parse_url($configuredMap) : false;
 $safeMap = is_array($mapParts)
     && strtolower((string)($mapParts['scheme'] ?? '')) === 'https'
@@ -14,10 +17,10 @@ $safeMap = is_array($mapParts)
     && !isset($mapParts['user'], $mapParts['pass'])
     && str_starts_with((string)($mapParts['path'] ?? ''), '/maps/')
     ? $configuredMap
-    : 'https://www.google.com/maps/d/embed?mid=1eSRrdHhUkSdX2se1R-QjZQa16UeT_Zk&ehbc=2E312F';
+    : '';
 $mapOpenUrl = $safeMap;
-$directionsAddress = trim((string)($portalProfile['alamat'] ?? '')) ?: trim((string)$portalProfile['nama']);
-$directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' . rawurlencode($directionsAddress); ?>
+$directionsAddress = portal_school_address($portalProfile);
+$directionsUrl = $directionsAddress !== '' ? 'https://www.google.com/maps/dir/?api=1&destination=' . rawurlencode($directionsAddress) : ''; ?>
 
 <section class="page-hero contact-page-hero">
     <div class="wrap">
@@ -58,7 +61,7 @@ $directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' . rawurle
                     <h2 id="contactInfoTitle"><i class="bi bi-card-list" aria-hidden="true"></i> Informasi Kontak</h2>
                     <ul class="contact-info-list">
                         <li><i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
-                            <div><strong>Alamat</strong><span><?= nl2br(e($portalProfile['alamat'] ?: 'Alamat sekolah belum diatur.')) ?></span></div>
+                            <div><strong>Alamat</strong><span><?= nl2br(e($directionsAddress ?: 'Alamat sekolah belum diatur.')) ?></span></div>
                         </li>
                         <li><i class="bi bi-envelope-fill" aria-hidden="true"></i>
                             <div><strong>Email</strong><?php if ($contactEmail !== ''): ?><a href="mailto:<?= e($contactEmail) ?>"><?= e($contactEmail) ?></a><?php else: ?><span>Email belum diatur.</span><?php endif; ?></div>
@@ -78,17 +81,17 @@ $directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' . rawurle
 
                 <section class="contact-map-panel" aria-labelledby="contactMapTitle">
                     <div class="contact-panel-heading">
-                        <h2 id="contactMapTitle"><i class="bi bi-map-fill" aria-hidden="true"></i> Lokasi Sekolah</h2><a href="<?= e($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer">Buka peta <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
+                        <h2 id="contactMapTitle"><i class="bi bi-map-fill" aria-hidden="true"></i> Lokasi Sekolah</h2><?php if ($mapOpenUrl !== ''): ?><a href="<?= e($mapOpenUrl) ?>" target="_blank" rel="noopener noreferrer">Buka peta <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a><?php endif; ?>
                     </div>
-                    <iframe class="contact-map-frame" src="<?= e($safeMap) ?>" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Peta lokasi <?= e($portalProfile['nama']) ?>" allowfullscreen></iframe>
-                    <a class="contact-directions-link" href="<?= e($directionsUrl) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-signpost-2-fill" aria-hidden="true"></i> Petunjuk arah ke sekolah</a>
+                    <?php if ($safeMap !== ''): ?><iframe class="contact-map-frame" src="<?= e($safeMap) ?>" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Peta lokasi <?= e($portalProfile['nama']) ?>" allowfullscreen></iframe><?php else: ?><p class="contact-location-empty">Peta belum tersedia karena tautan lokasi resmi belum diatur.</p><?php endif; ?>
+                    <?php if ($directionsUrl !== ''): ?><a class="contact-directions-link" href="<?= e($directionsUrl) ?>" target="_blank" rel="noopener noreferrer"><i class="bi bi-signpost-2-fill" aria-hidden="true"></i> Petunjuk arah ke alamat sekolah</a><?php endif; ?>
                 </section>
             </aside>
 
             <section class="contact-form-panel" aria-labelledby="messageFormTitle">
                 <div class="contact-panel-heading contact-form-heading">
                     <h2 id="messageFormTitle"><i class="bi bi-send-fill" aria-hidden="true"></i> Kirim Pesan</h2>
-                    <p>Pesan Anda akan diterima oleh petugas sekolah.</p>
+                    <p>Pesan Anda akan diterima oleh petugas sekolah. Formulir ini bukan kanal untuk keadaan darurat.</p>
                 </div>
                 <?php if (portal_schema_ready($pdo, 'pesan_kontak', ['nama_pengirim', 'email_pengirim', 'subjek', 'status']) && portal_schema_ready($pdo, 'pesan_kontak_balasan', ['pesan_id', 'pengirim', 'isi'])): ?>
                     <form class="public-form contact-message-form" action="proses-pesan.php" method="post"><input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">

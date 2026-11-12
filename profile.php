@@ -138,7 +138,7 @@ require __DIR__ . '/includes/header.php';
                         <div class="col-md-6"><label class="form-label" for="accountRole">Peran</label><input class="form-control" id="accountRole" value="<?= e(role_label($user['role'])) ?>" readonly></div>
                         <div class="col-md-6"><label class="form-label" for="accountStatus">Status Akun</label><input class="form-control account-status-input" id="accountStatus" value="Aktif" readonly></div>
                         <div class="col-12"><label class="form-label" for="foto">Foto Profil</label><input class="form-control" id="foto" name="foto" type="file" accept="image/jpeg,image/png,image/webp">
-                            <div class="form-text">JPG, PNG, atau WebP, maksimal 2 MB. Email akun belum menjadi kolom profil pada sistem saat ini.</div><?php if (!empty($user['foto_path'])): ?><div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="hapus_foto" name="hapus_foto" value="1"><label class="form-check-label" for="hapus_foto">Hapus foto profil saat menyimpan</label></div><?php endif; ?>
+                            <div class="form-text">JPG, PNG, atau WebP, maksimal 2 MB. Email dan nomor telepon dapat diisi melalui halaman Biodata Saya.</div><?php if (!empty($user['foto_path'])): ?><div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="hapus_foto" name="hapus_foto" value="1"><label class="form-check-label" for="hapus_foto">Hapus foto profil saat menyimpan</label></div><?php endif; ?>
                         </div>
                     </div>
                 </section>

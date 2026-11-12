@@ -1111,48 +1111,100 @@
 .admin-dashboard-content>.admin-stat-grid,
 .operator-dashboard-content>.dashboard-operator-stats,
 .principal-dashboard-content>.principal-stat-grid {
+    order: 4;
+}
+
+.admin-dashboard-content>.dashboard-filter-wrap {
     order: 3;
+    margin-bottom: 1rem !important;
+    padding: 1rem 1.1rem;
+    border: 1px solid #e4ebf5;
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: 0 7px 20px #102b4a0d;
+}
+
+.dashboard-navy-theme .admin-dashboard-content>.dashboard-filter-wrap {
+    border-color: #263e62;
+    background: linear-gradient(145deg, #102443, #0c1d38 75%);
+    box-shadow: 0 9px 24px #020b1c4d;
+}
+
+.admin-dashboard-content .dashboard-filter-wrap .dashboard-filter {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+    align-items: end;
+    gap: 12px;
+}
+
+.admin-dashboard-content .dashboard-filter-wrap .dashboard-filter>div {
+    min-width: 0;
+}
+
+.admin-dashboard-content .dashboard-filter-wrap .dashboard-filter>.btn {
+    min-height: 31px;
+    padding-inline: 1rem;
+}
+
+@media(max-width:900px) {
+    .admin-dashboard-content .dashboard-filter-wrap .dashboard-filter {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media(max-width:575px) {
+    .admin-dashboard-content>.dashboard-filter-wrap {
+        padding: .85rem;
+    }
+
+    .admin-dashboard-content .dashboard-filter-wrap .dashboard-filter {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .admin-dashboard-content>.principal-data-status,
 .operator-dashboard-content>.principal-data-status,
 .principal-dashboard-content>.principal-data-status {
-    order: 4;
+    order: 5;
 }
 
 .admin-dashboard-content>.dashboard-analytics-primary,
 .operator-dashboard-content>.dashboard-analytics-primary,
 .principal-dashboard-content>.dashboard-analytics-primary {
-    order: 5;
+    order: 6;
 }
 
 .admin-dashboard-content>.dashboard-analytics-secondary,
 .operator-dashboard-content>.dashboard-analytics-secondary,
 .principal-dashboard-content>.dashboard-analytics-secondary {
-    order: 6;
+    order: 7;
 }
 
 .admin-dashboard-content>.dashboard-analytics-tertiary,
 .operator-dashboard-content>.dashboard-analytics-tertiary,
 .principal-dashboard-content>.dashboard-analytics-tertiary {
-    order: 7;
+    order: 8;
 }
 
 .admin-dashboard-content>.dashboard-admin-activity,
 .operator-dashboard-content>.dashboard-operator-overview {
-    order: 8;
+    order: 10;
+}
+
+.admin-dashboard-content>.dashboard-quick-insights {
+    order: 9;
 }
 
 .admin-dashboard-content>.dashboard-announcement-agenda,
 .operator-dashboard-content>.dashboard-announcement-agenda,
 .principal-dashboard-content>.dashboard-announcement-agenda {
-    order: 9;
+    order: 11;
 }
 
 .admin-dashboard-content>.dashboard-class-sessions,
 .operator-dashboard-content>.dashboard-class-sessions,
 .principal-dashboard-content>.dashboard-class-sessions {
-    order: 10;
+    order: 12;
 }
 
 .principal-dashboard-content>.dashboard-principal-monitoring {

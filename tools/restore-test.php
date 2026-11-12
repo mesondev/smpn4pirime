@@ -32,7 +32,7 @@ if ($environment === 'production') $fail('Uji restore dinonaktifkan pada environ
 if (!in_array($databaseHost, ['localhost', '127.0.0.1', '::1'], true)) {
     $fail('Uji restore hanya diizinkan terhadap database lokal.');
 }
-if (!class_exists(ZipArchive::class)) $fail('Aktifkan ekstensi PHP zip pada PHP Laragon.');
+if (!class_exists(ZipArchive::class)) $fail('Aktifkan ekstensi PHP zip pada instalasi PHP XAMPP.');
 
 $projectPrefix = strtolower(rtrim(str_replace('\\', '/', $projectRoot), '/') . '/');
 $backupNormalized = strtolower(rtrim(str_replace('\\', '/', $backupDirectory), '/') . '/');
@@ -110,13 +110,14 @@ if (!preg_match('/^[A-Za-z0-9_]+$/', (string)($manifest['database'] ?? ''))) {
 }
 $mysqlPath = trim((string)(getenv('SIMS_MYSQL') ?: ''));
 if ($mysqlPath === '') {
-    $dumpCandidates = glob('C:/laragon/bin/mysql/mysql-*/bin/mysqldump.exe') ?: [];
+    $dumpCandidates = glob('C:/xampp/mysql/bin/mysqldump.exe') ?: [];
+    if (!$dumpCandidates) $dumpCandidates = glob('C:/laragon/bin/mysql/mysql-*/bin/mysqldump.exe') ?: [];
     rsort($dumpCandidates, SORT_NATURAL);
     $mysqlPath = isset($dumpCandidates[0]) ? dirname($dumpCandidates[0]) . '/mysql.exe' : '';
 }
 if ($mysqlPath === '' || !is_file($mysqlPath)) {
     $archive->close();
-    $fail('mysql.exe tidak ditemukan. Atur SIMS_MYSQL ke executable MySQL Laragon.');
+    $fail('mysql.exe tidak ditemukan. Atur SIMS_MYSQL ke executable XAMPP atau MySQL yang aktif.');
 }
 
 $optionFile = tempnam(sys_get_temp_dir(), 'sims-restore-');

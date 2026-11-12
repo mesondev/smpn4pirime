@@ -104,6 +104,26 @@ function migration_schema_ready(PDO $pdo, string $name): bool
         '2026_11_03_ppdb_management.sql' => [
             'ppdb_status_history' => ['pendaftar_id', 'status_sebelumnya', 'status_baru', 'catatan', 'actor_user_id', 'dibuat_pada'],
         ],
+        '2026_11_04_create_staff.sql' => [
+            'staff' => ['id', 'nip', 'nama', 'jenis_kelamin', 'jabatan', 'unit_kerja', 'no_hp', 'email', 'alamat', 'status', 'tanggal_masuk', 'created_at', 'updated_at'],
+        ],
+        '2026_11_04_student_class_history.sql' => [
+            'student_class_history' => ['id', 'siswa_id', 'kelas_asal_id', 'tahun_ajaran_asal_id', 'kelas_tujuan_id', 'tahun_ajaran_tujuan_id', 'alasan', 'actor_user_id', 'dibuat_pada'],
+        ],
+        '2026_11_04_dynamic_rbac.sql' => [
+            'roles' => ['id', 'slug', 'nama', 'system_locked'],
+            'permissions' => ['id', 'permission_key', 'module_key', 'action_name', 'label'],
+            'role_permissions' => ['role_id', 'permission_id', 'granted'],
+        ],
+        '2026_11_04_audit_logs.sql' => [
+            'audit_logs' => ['id', 'actor_user_id', 'action_name', 'module_key', 'record_id', 'old_data', 'new_data', 'ip_address', 'user_agent', 'created_at'],
+        ],
+        '2026_11_04_email_queue.sql' => [
+            'outbound_email_queue' => ['id', 'reply_id', 'recipient', 'subject', 'body', 'status', 'attempts', 'max_attempts', 'next_attempt_at', 'locked_at', 'last_error', 'created_at', 'sent_at'],
+        ],
+        '2026_11_04_public_visitors.sql' => [
+            'portal_pengunjung_harian' => ['tanggal', 'pengunjung', 'updated_at'],
+        ],
         default => [],
     };
     if (!$required) return false;
@@ -159,6 +179,12 @@ $schemaValidatedMigrations = [
     '2026_11_02_public_services.sql',
     '2026_11_03_user_display_preferences.sql',
     '2026_11_03_ppdb_management.sql',
+    '2026_11_04_create_staff.sql',
+    '2026_11_04_student_class_history.sql',
+    '2026_11_04_dynamic_rbac.sql',
+    '2026_11_04_audit_logs.sql',
+    '2026_11_04_email_queue.sql',
+    '2026_11_04_public_visitors.sql',
 ];
 foreach ($files as $file) {
     $name = basename($file);

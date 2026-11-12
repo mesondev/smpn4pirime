@@ -23,6 +23,9 @@ require __DIR__ . '/_header.php';
             <h2>Informasi pengunjung</h2>
             <p>Halaman informasi dapat dibaca tanpa membuat akun. Formulir kontak hanya meminta nama, alamat email, dan isi pesan agar sekolah dapat menindaklanjuti pertanyaan. Mohon tidak mengirimkan kata sandi, nomor identitas, atau data sensitif siswa melalui formulir tersebut.</p>
 
+            <h2>Statistik kunjungan portal</h2>
+            <p>Portal menampilkan perkiraan jumlah pengunjung harian berdasarkan sesi browser. Satu sesi dihitung paling banyak sekali per hari; orang yang menggunakan perangkat atau browser berbeda, atau kembali pada hari lain, dapat dihitung kembali. Statistik disimpan sebagai jumlah agregat per tanggal dan portal tidak menyimpan alamat IP untuk penghitung ini. Angka tersebut merupakan perkiraan kunjungan, bukan jumlah orang unik yang dapat dipastikan.</p>
+
             <h2>Permohonan PPDB</h2>
             <p>Jika pendaftaran daring dibuka, data yang diminta digunakan untuk memproses permohonan dan komunikasi terkait. Akses data dibatasi untuk petugas berwenang dan hanya disimpan sesuai kebutuhan layanan serta kebijakan sekolah. Dokumen pribadi tidak ditampilkan sebagai unduhan publik.</p>
 

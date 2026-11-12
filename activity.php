@@ -4,10 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/config/database.php';
 require_login();
-if (current_role() !== 'admin') {
-    http_response_code(403);
-    exit('Log aktivitas hanya dapat diakses Super Admin.');
-}
+require_module_access('log_aktivitas');
 $q = trim((string)($_GET['q'] ?? ''));
 $action = trim((string)($_GET['aksi'] ?? ''));
 $entity = trim((string)($_GET['entitas'] ?? ''));
@@ -82,7 +79,7 @@ require __DIR__ . '/includes/header.php';
     <div>
         <h1>Log Aktivitas</h1>
         <p>Riwayat tindakan akun dan perubahan penting. Informasi autentikasi rahasia tidak ditampilkan.</p>
-    </div><a class="btn btn-outline-success no-print" href="activity.php?<?= e(http_build_query(array_merge($filters, ['export' => 'csv']))) ?>"><i class="bi bi-download me-1"></i>Ekspor CSV</a>
+    </div><div class="d-flex gap-2"><a class="btn btn-outline-primary no-print" href="audit.php">Audit Perubahan</a><a class="btn btn-outline-success no-print" href="activity.php?<?= e(http_build_query(array_merge($filters, ['export' => 'csv']))) ?>"><i class="bi bi-download me-1"></i>Ekspor CSV</a></div>
 </div>
 <?php if ($error): ?>
     <div class="alert alert-warning"><?= e($error) ?>

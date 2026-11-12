@@ -21,6 +21,53 @@
     box-shadow: 0 12px 35px #173c600b;
 }
 
+.school-leadership-section {
+    display: grid;
+    gap: 12px;
+}
+
+.school-leadership-card {
+    padding: clamp(20px, 3.4vw, 32px);
+}
+
+.school-leadership-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.school-leadership-list article {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.school-leadership-list img {
+    width: 52px;
+    height: 52px;
+    flex: none;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.school-leadership-list strong,
+.school-leadership-list span {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.school-leadership-list span {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: .82rem;
+}
+
 .school-about-card {
     display: grid;
     grid-template-columns: minmax(0, 1.45fr) minmax(220px, .55fr);

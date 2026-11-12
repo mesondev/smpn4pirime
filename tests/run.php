@@ -48,6 +48,19 @@ $test('HTML output is escaped', static function () use ($assert): void {
     $assert(e(null) === '', 'null should render as an empty string');
 });
 
+$test('audit snapshots omit credentials and personal fields', static function () use ($assert): void {
+    $snapshot = json_decode((string)audit_safe_snapshot([
+        'status' => 'Aktif',
+        'password_hash' => 'must-not-appear',
+        'nama_lengkap' => 'Nama Pribadi',
+        'email' => 'private@example.test',
+        'alamat' => 'Alamat Pribadi',
+        'catatan' => 'Catatan privat',
+    ]), true);
+    $assert($snapshot === ['status' => 'Aktif'], 'audit snapshot did not filter private values');
+    $assert(audit_safe_snapshot(['password' => 'secret']) === null, 'credential-only audit snapshot should be empty');
+});
+
 $test('role labels and access rules are consistent', static function () use ($assert): void {
     $roles = ['admin', 'operator', 'guru', 'siswa', 'kepala_sekolah'];
     foreach ($roles as $role) {
@@ -56,10 +69,12 @@ $test('role labels and access rules are consistent', static function () use ($as
     }
     $_SESSION['role'] = 'admin';
     $assert(role_label() === 'Super Admin' && can_manage_module('siswa'), 'admin access or label incorrect');
+    $assert(is_valid_role('admin') && !is_valid_role('unknown'), 'supported role validation is incorrect');
     $assert(can_view_module('ppdb_admin'), 'admin should access PPDB management');
     $assert(can_view_module('portal_admin') && can_view_module('portal_fasilitas'), 'admin should access public portal management');
     $_SESSION['role'] = 'operator';
     $assert(can_manage_module('siswa') && !can_manage_module('pengguna'), 'operator permissions incorrect');
+    $assert(can_view_module('staf') && can_manage_module('staf'), 'operator should manage staff directory');
     $assert(!can_view_module('ppdb_admin'), 'operator should not access restricted PPDB applicant records');
     $assert(!can_view_module('portal_admin') && !can_view_module('portal_dokumen_publik'), 'operator should not access restricted portal publishing');
     foreach (['guru', 'siswa', 'kepala_sekolah', 'unknown'] as $role) {
@@ -68,6 +83,11 @@ $test('role labels and access rules are consistent', static function () use ($as
     }
     $_SESSION['role'] = 'kepala_sekolah';
     $assert(can_view_module('kelas') && !can_view_module('pengguna'), 'principal read permissions incorrect');
+    $assert(!can_view_module('staf'), 'principal should not access staff management');
+    $_SESSION['role'] = 'unknown';
+    $assert(!can_view_module('notifikasi') && !can_manage_module('siswa'), 'unknown roles must fail closed');
+    $unknownNavigation = require __DIR__ . '/../includes/navigation.php';
+    $assert($unknownNavigation === [], 'unknown role must not receive a privileged navigation menu');
 });
 
 $test('display preferences reject invalid values and normalize sidebar state', static function () use ($assert): void {
@@ -117,20 +137,87 @@ $test('teacher import templates are tracked project assets with supported header
     $assert(str_contains($module, 'assets/templates/Template_Data_Guru_SMPN4_Pirime.xlsx'), 'Excel template link is missing');
 });
 
-$test('public carousel can be paused and long-form content is not hidden automatically', static function () use ($assert, $root): void {
+$test('CRUD detail and class history keep access controls and staged imports', static function () use ($assert, $root): void {
+    $index = (string)file_get_contents($root . '/index.php');
+    $history = (string)file_get_contents($root . '/student_class_history.php');
+    $teacher = (string)file_get_contents($root . '/modules/guru.php');
+    $staff = (string)file_get_contents($root . '/staff_import.php');
+    $assert(str_contains($index, '$detailFieldKeys = array_keys($fields)'), 'CRUD detail does not include every configured field');
+    $assert(str_contains($history, "require_module_access('siswa')"), 'student history route has no module access check');
+    $assert(str_contains($history, "\$_GET['format'] ?? ''") && str_contains($history, 'fputcsv($out'), 'student history CSV export is missing');
+    $assert(str_contains($teacher, 'import_confirm') && str_contains($teacher, "'_guru_import_staging'"), 'teacher import confirmation staging is missing');
+    $assert(str_contains($staff, "require_module_access('staf', true)") && str_contains($staff, "'confirm'"), 'staff import is missing write permission or confirmation');
+    $assert(is_file($root . '/docs/module-inventory.md'), 'module inventory documentation is missing');
+    $assert(is_file($root . '/docs/database-relationships.md'), 'database relationship documentation is missing');
+    $assert(is_file($root . '/docs/feature-acceptance.md'), 'feature acceptance checklist is missing');
+});
+
+$test('staff report is aggregated, permission-guarded, filterable, and CSV-safe', static function () use ($assert, $root): void {
+    $reportPage = (string)file_get_contents($root . '/reports.php');
+    $staffList = (string)file_get_contents($root . '/index.php');
+    $assert(str_contains($reportPage, "require_module_access('staf')"), 'staff report has no server-side module permission check');
+    $assert(str_contains($staffList, '$canView = can_view_module($moduleKey);'), 'staff report link references an uninitialized access flag');
+    $assert(str_contains($reportPage, 'COUNT(*) AS jumlah FROM staff'), 'staff report must use aggregate counts rather than personal details');
+    $assert(str_contains($reportPage, 'GROUP BY jabatan,status ORDER BY jabatan,status'), 'staff report aggregation is incomplete');
+    $assert(str_contains($reportPage, "preg_match('/^[\\s]*[=+@-]/u'"), 'CSV formula-injection guard is missing');
+    $assert(str_contains($staffList, 'reports.php?type=staf'), 'staff list does not link to its report');
+});
+
+$test('public carousel uses left/right tap zones without arrow or pause buttons and respects reduced motion', static function () use ($assert, $root): void {
     $javascript = (string)file_get_contents($root . '/assets/public.js');
     $homepage = (string)file_get_contents($root . '/public/index.php');
-    $assert(str_contains($javascript, '[data-hero-toggle]'), 'carousel pause control is not wired');
-    $assert(str_contains($javascript, 'isPaused || reducedMotion.matches'), 'carousel does not respect pause and reduced-motion settings');
-    $assert(str_contains($homepage, 'data-hero-toggle'), 'carousel pause control is missing from the page');
+    $stylesheet = (string)file_get_contents($root . '/assets/public.css');
+    $assert(!str_contains($homepage, 'data-hero-toggle'), 'carousel pause button is still rendered');
+    $assert(!str_contains($javascript, 'data-hero-toggle'), 'carousel JavaScript still expects the removed pause button');
+    $assert(!str_contains($homepage, 'data-hero-prev') && !str_contains($homepage, 'data-hero-next'), 'visible previous/next arrow controls are still rendered');
+    $assert(str_contains($javascript, 'clickedLeftSide') && str_contains($javascript, 'event.clientX < bounds.left + bounds.width / 2'), 'left/right carousel click zones are not wired');
+    $assert(str_contains($javascript, "event.key === 'ArrowLeft'") && str_contains($javascript, "event.key === 'ArrowRight'"), 'carousel keyboard navigation is missing');
+    $assert(str_contains($javascript, "target.closest( 'a, button, input, select, textarea, summary, [role=\"button\"]' )"), 'carousel click navigation may intercept slide links or indicators');
+    $assert(str_contains($javascript, 'reducedMotion.matches') && str_contains($javascript, "document.addEventListener( 'visibilitychange', syncTimer )"), 'carousel does not respect reduced motion or hidden tabs');
+    $assert(!str_contains($stylesheet, '.hero-toggle'), 'obsolete pause button styles remain');
+    $assert(is_file($root . '/docs/laporan-lengkap-navigasi-portal-publik.md'), 'complete public navigation report is missing');
     $assert(!str_contains($javascript, "querySelectorAll( 'main p' )"), 'long paragraphs are still collapsed automatically');
     $assert(!str_contains($javascript, "querySelectorAll( 'main ul, main ol' )"), 'long lists are still truncated automatically');
     $assert(!str_contains($javascript, "querySelectorAll( 'main table tbody' )"), 'table rows are still hidden automatically');
 });
 
+$test('public content follows the approved page structure while navigation routes stay intact', static function () use ($assert, $root): void {
+    $navigation = (string)file_get_contents($root . '/public/_header.php');
+    foreach (['index.php', 'profil.php#schoolAboutTitle', 'sejarah.php', 'visi-misi.php', 'guru.php', 'struktur.php', 'fasilitas.php', 'akademik.php', 'kurikulum.php', 'jadwal.php', 'agenda.php', 'ekstrakurikuler.php', 'berita.php', 'pengumuman.php', 'prestasi.php', 'galeri.php', 'unduhan.php', 'ppdb.php#informasi-ppdb', 'cek_pendaftaran.php', 'hasil-seleksi.php', 'kontak.php', 'pencarian.php'] as $route) {
+        $assert(str_contains($navigation, 'href="' . $route . '"'), 'public navigation route was removed: ' . $route);
+    }
+    $home = (string)file_get_contents($root . '/public/index.php');
+    $profile = (string)file_get_contents($root . '/public/profil.php');
+    $gallery = (string)file_get_contents($root . '/public/galeri.php');
+    $facilities = (string)file_get_contents($root . '/public/fasilitas.php');
+    $news = (string)file_get_contents($root . '/public/berita.php');
+    $notices = (string)file_get_contents($root . '/public/pengumuman.php');
+    $downloads = (string)file_get_contents($root . '/public/unduhan.php');
+    $common = (string)file_get_contents($root . '/public/_common.php');
+    $footer = (string)file_get_contents($root . '/public/_footer.php');
+    $historyPage = (string)file_get_contents($root . '/public/sejarah.php');
+    $visionPage = (string)file_get_contents($root . '/public/visi-misi.php');
+    $teacherPage = (string)file_get_contents($root . '/public/guru.php');
+    $assert(str_contains($home, 'homeTeachersReady') && str_contains($home, 'homeFacilitiesReady'), 'home page is missing public teacher/facility sections');
+    $assert(str_contains($home, 'home-profile-summary') && str_contains($home, 'homeProfileTitle'), 'home page is missing its structured school profile summary');
+    $assert(strpos($profile, 'school-leadership-section') < strpos($profile, 'school-history-card') && strpos($profile, 'school-history-card') < strpos($profile, 'school-direction-grid'), 'profile section order differs from the approved layout');
+    $assert(!str_contains($gallery, '$illustrationImages') && !str_contains($facilities, '$facilityImages'), 'illustrative assets are still presented as actual public gallery/facility content');
+    $assert(str_contains($news, 'name="kategori"') && str_contains($news, 'public-pagination'), 'news category filter or pagination is missing');
+    $assert(str_contains($notices, 'tanggal_mulai') && str_contains($notices, 'public-pagination'), 'announcement period filter or pagination is missing');
+    $assert(str_contains($downloads, 'document-metadata') && str_contains($downloads, 'filesize'), 'download cards are missing document format/size metadata');
+    $assert(str_contains($common, 'function portal_school_address') && str_contains($footer, 'portal_school_address($portalProfile)'), 'public address does not use the cleaned structured school data');
+    $assert(str_contains($profile, "sambutan_status") && str_contains($profile, 'belum memiliki status persetujuan'), 'unapproved principal greeting can be presented as official');
+    $assert(str_contains($historyPage, "['resmi', 'terverifikasi']") && str_contains($historyPage, 'schoolHistoryTitle'), 'school history published status or page content is missing');
+    $assert(str_contains($visionPage, "status_value'] === 'resmi'") && str_contains($visionPage, 'profile-direction-grid'), 'vision, mission, and objectives are not status-gated/responsive');
+    $assert(str_contains($teacherPage, 'profile-pagination') && str_contains($teacherPage, 'profile-teacher-card'), 'public teacher directory is missing its modern card/pagination layout');
+    $assert(str_contains($navigation, 'kontak.php#contactMapTitle') && str_contains((string)file_get_contents($root . '/public/kontak.php'), 'id="contactMapTitle"'), 'Profile menu location anchor no longer targets the map section');
+    $assert(str_contains((string)file_get_contents($root . '/assets/public.css'), '.profile-direction-grid') && str_contains((string)file_get_contents($root . '/assets/public.css'), 'max-width: 560px'), 'responsive styles for Profile dropdown pages are missing');
+});
+
 $test('backup tooling is CLI-only and restore tests cannot target or drop the live database', static function () use ($assert, $root): void {
     $backup = (string)file_get_contents($root . '/tools/backup.php');
     $restore = (string)file_get_contents($root . '/tools/restore-test.php');
+    $mailWorker = (string)file_get_contents($root . '/tools/process-mail-queue.php');
     $assert(str_contains($backup, "PHP_SAPI !== 'cli'"), 'backup is not restricted to CLI');
     $assert(str_contains($backup, 'Folder backup harus berada di luar folder proyek'), 'backup path is not kept outside the project');
     $assert(str_contains($backup, 'SIMS_BACKUP_DIR'), 'backup output directory is not configurable');
@@ -138,6 +225,7 @@ $test('backup tooling is CLI-only and restore tests cannot target or drop the li
     $assert(str_contains($restore, "'sims_restore_test_'"), 'restore test database name is not isolated');
     $assert(str_contains($restore, 'CREATE DATABASE'), 'restore test does not create an isolated database');
     $assert(!preg_match('/DROP\s+DATABASE/i', $restore), 'restore test must never drop a database');
+    $assert(str_contains($mailWorker, "PHP_SAPI !== 'cli'"), 'mail queue worker is not restricted to CLI');
     $assert(str_contains($restore, "SELECT COUNT(*) FROM users"), 'restore test does not validate restored account rows');
     $assert(str_contains($restore, 'archived_file_count'), 'restore test does not validate restored file count');
     $assert(str_contains($restore, '--verify-only'), 'backup verification mode is missing');
@@ -336,6 +424,7 @@ if (!function_exists('curl_init')) {
         $test('standalone protected pages require login without PHP fatal errors', static function () use ($assert, $httpBase): void {
             foreach ([
                 '/activity.php',
+                '/audit.php',
                 '/biodata.php',
                 '/bulk_absensi.php',
                 '/learning.php',
@@ -345,8 +434,11 @@ if (!function_exists('curl_init')) {
                 '/pesan_masuk.php',
                 '/index.php?module=ppdb_admin',
                 '/index.php?module=portal_admin',
+                '/index.php?module=staf',
+                '/permissions.php',
                 '/profile.php',
                 '/reports.php',
+                '/reports.php?type=staf',
                 '/search.php',
                 '/student.php',
                 '/teacher.php',

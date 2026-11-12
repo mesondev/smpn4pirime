@@ -6,7 +6,6 @@ require_once __DIR__ . '/_public_sections.php';
 $portalProfile = portal_profile($pdo);
 $pageTitle = 'Direktori Guru';
 $activePage = 'guru';
-$teacherImages = public_teacher_images();
 $query = trim(mb_substr((string)($_GET['q'] ?? ''), 0, 100, 'UTF-8'));
 $perPage = 12;
 $page = max(1, (int)($_GET['page'] ?? 1));
@@ -32,6 +31,8 @@ if ($ready) {
     $total = (int)$count->fetchColumn();
     $pageCount = max(1, (int)ceil($total / $perPage));
     $page = min($page, $pageCount);
+    $resultFrom = $total > 0 ? (($page - 1) * $perPage + 1) : 0;
+    $resultTo = min($total, $page * $perPage);
     $offset = ($page - 1) * $perPage;
     $photoSelect = isset($columns['foto']) ? ',foto' : '';
     $list = $pdo->prepare('SELECT id,nama' . $photoSelect . ' FROM guru WHERE ' . $where . ' ORDER BY nama,id LIMIT ' . $perPage . ' OFFSET ' . $offset);
@@ -41,78 +42,59 @@ if ($ready) {
 require __DIR__ . '/_header.php';
 
 ?>
-<section class="page-hero">
+<section class="page-hero directory-page-hero">
     <div class="wrap">
-        <span class="eyebrow">Tenaga pendidik</span>
+        <span class="eyebrow">Profil sekolah</span>
         <h1>Direktori Guru</h1>
-        <p>Profil guru aktif yang telah disetujui pengelola sekolah untuk ditampilkan kepada masyarakat.</p>
+        <p>Kenali tenaga pendidik yang telah menyetujui profilnya untuk ditampilkan kepada masyarakat.</p>
         <?= portal_breadcrumb_markup($activePage ?? '', $pageTitle ?? '') ?>
     </div>
 </section>
 
-<section class="content">
-    <div class="wrap">
+<section class="content profile-subpage-content directory-page-content">
+    <div class="wrap profile-directory-wrap">
+        <div class="profile-directory-intro"><span class="profile-story-icon" aria-hidden="true"><i class="bi bi-person-workspace"></i></span><div><strong>Guru dan tenaga kependidikan</strong><p>Direktori hanya memuat profil aktif yang ditandai boleh ditampilkan oleh pengelola. Informasi pribadi dan kontak langsung personel tidak dipublikasikan.</p></div></div>
         <?php if (!$ready): ?>
             <?php public_service_notice('Direktori guru belum dapat dimuat. Untuk pertanyaan mengenai tenaga pendidik, silakan hubungi sekolah.'); ?>
         <?php else: ?>
-            <form class="search-form" method="get" role="search">
-                <input name="q" value="<?= e($query) ?>" placeholder="Cari nama guru" aria-label="Cari nama guru">
-                <button type="submit">Cari</button>
-                <?php if ($query !== ''): ?>
-                    <a class="btn-primary" style="background:var(--paper)" href="guru.php">Reset</a>
-                <?php endif; ?>
+            <form class="search-form profile-directory-search" method="get" role="search">
+                <label for="teacherQuery">Cari nama</label><input id="teacherQuery" name="q" maxlength="100" value="<?= e($query) ?>" placeholder="Ketik nama guru">
+                <button type="submit"><i class="bi bi-search" aria-hidden="true"></i> Cari</button>
+                <?php if ($query !== ''): ?><a class="profile-reset-link" href="guru.php">Hapus pencarian</a><?php endif; ?>
             </form>
+            <?php if ($total > 0): ?><p class="profile-result-count" role="status">Menampilkan <?= number_format($resultFrom, 0, ',', '.') ?>–<?= number_format($resultTo, 0, ',', '.') ?> dari <?= number_format($total, 0, ',', '.') ?> profil yang disetujui.</p><?php endif; ?>
             <?php if (!$teachers): ?>
                 <?php public_empty_panel('people', $query !== '' ? 'Guru tidak ditemukan' : 'Profil guru belum tersedia', $query !== '' ? 'Periksa ejaan nama atau coba kata kunci yang lebih singkat.' : 'Profil guru akan ditampilkan setelah disetujui untuk publikasi.'); ?>
 
             <?php else: ?>
-                <div class="cards">
+                <div class="cards profile-teacher-grid">
                     <?php foreach ($teachers as $teacher): $photo = (string)($teacher['foto'] ?? '');
                         $photo = preg_match('~^uploads/guru/[a-f0-9-]+\.(?:jpg|png|webp)$~i', $photo) ? '../media/guru.php?id=' . (int)$teacher['id'] : ''; ?>
-                        <article class="card story-card" style="text-align:center;padding:24px">
-                            <div style="height:156px;display:grid;place-items:center;margin-bottom:16px">
+                        <article class="card profile-teacher-card">
+                            <div class="profile-teacher-photo">
                                 <?php if ($photo): ?>
-                                    <img src="<?= e($photo) ?>" alt="Foto <?= e($teacher['nama']) ?>" style="width:112px;height:140px;object-fit:cover;border-radius:14px" loading="lazy">
+                                    <img src="<?= e($photo) ?>" alt="Foto <?= e($teacher['nama']) ?>" loading="lazy" decoding="async">
                                 <?php else: ?>
-                                    <span class="tile-icon" style="width:96px;height:96px;border-radius:50%;font-size:2.5rem">
+                                    <span aria-hidden="true">
                                         <i class="bi bi-person-fill"></i>
                                     </span>
                                 <?php endif; ?>
                             </div>
-
-                            <h2 style="font-size:1.05rem;margin:0">
-                                <?= e($teacher['nama']) ?></h2>
-                            <p class="article-meta" style="margin:6px 0 0">Tenaga Pendidik</p>
+                            <span class="kicker">Tenaga pendidik</span>
+                            <h2><?= e($teacher['nama']) ?></h2>
                         </article>
                     <?php endforeach; ?>
                 </div>
 
                 <?php if ($pageCount > 1): ?>
-                    <nav aria-label="Halaman direktori" style="display:flex;justify-content:center;gap:8px;margin-top:28px">
+                    <nav class="profile-pagination" aria-label="Halaman direktori guru">
+                        <?php if ($page > 1): ?><a href="?<?= e(http_build_query(['q' => $query, 'page' => $page - 1])) ?>" rel="prev"><i class="bi bi-arrow-left" aria-hidden="true"></i> Sebelumnya</a><?php endif; ?>
                         <?php for ($number = max(1, $page - 2); $number <= min($pageCount, $page + 2); $number++): ?>
-                            <a class="<?= $number === $page ? 'staff-link' : 'text-link' ?>" href="?<?= e(http_build_query(['q' => $query, 'page' => $number])) ?>">
-                                <?= $number ?>
-                            </a><?php endfor; ?>
+                            <a class="<?= $number === $page ? 'is-current' : '' ?>" href="?<?= e(http_build_query(['q' => $query, 'page' => $number])) ?>" <?= $number === $page ? 'aria-current="page"' : '' ?>><?= $number ?></a><?php endfor; ?>
+                        <?php if ($page < $pageCount): ?><a href="?<?= e(http_build_query(['q' => $query, 'page' => $page + 1])) ?>" rel="next">Berikutnya <i class="bi bi-arrow-right" aria-hidden="true"></i></a><?php endif; ?>
                     </nav>
                 <?php endif; ?>
             <?php endif; ?>
-        <?php endif; ?>
-        <?php if (!$teachers && $query === ''): ?>
-            <section class="public-image-section" aria-label="Foto tenaga pendidik">
-                <div class="section-head public-inline-heading">
-                    <div><span class="kicker">Tenaga pendidik</span>
-                        <h2>Potret guru sekolah</h2>
-                        <p>Foto berasal dari folder aset guru. Nama dan profil individual akan ditampilkan setelah data jabatan dan izin publikasi dikonfirmasi.</p>
-                    </div>
-                </div>
-                <div class="teacher-reference-grid">
-                    <?php foreach ($teacherImages as $index => $image): ?>
-                        <figure class="card teacher-reference-card"><img src="<?= e($image['src']) ?>" alt="<?= e($image['alt']) ?>" loading="lazy" decoding="async">
-                            <figcaption><strong>Tenaga pendidik</strong><span>Foto <?= $index + 1 ?> · nama menunggu konfirmasi</span></figcaption>
-                        </figure>
-                    <?php endforeach; ?>
-                </div>
-            </section>
         <?php endif; ?>
     </div>
 </section>

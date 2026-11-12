@@ -1,5 +1,11 @@
 // Public portal interactions: social feedback, hero carousel, weather, and navigation.
 document.addEventListener( 'DOMContentLoaded', () => {
+    document.querySelectorAll( 'form[data-confirm-submit]' ).forEach( ( form ) => {
+        form.addEventListener( 'submit', ( event ) => {
+            if ( !window.confirm( form.dataset.confirmSubmit || 'Lanjutkan mengirim formulir?' ) ) event.preventDefault();
+        } );
+    } );
+
     let readMoreId = 0;
     const addReadMore = ( content, label, className ) => {
         if ( content.dataset.readMoreReady === 'true' ) return;
@@ -41,11 +47,9 @@ document.addEventListener( 'DOMContentLoaded', () => {
         const slides = Array.from( carousel.querySelectorAll( '[data-hero-slide]' ) );
         const dots = Array.from( carousel.querySelectorAll( '[data-hero-dot]' ) );
         const progress = carousel.querySelector( '[data-hero-progress]' );
-        const toggle = carousel.querySelector( '[data-hero-toggle]' );
         const reducedMotion = window.matchMedia( '(prefers-reduced-motion: reduce)' );
         let activeIndex = Math.max( 0, slides.findIndex( ( slide ) => slide.classList.contains( 'is-active' ) ) );
         let timer = null;
-        let isPaused = false;
         const intervalMs = 6000;
 
         const displaySlide = ( index ) => {
@@ -76,30 +80,32 @@ document.addEventListener( 'DOMContentLoaded', () => {
         };
         const syncTimer = () => {
             stopTimer();
-            if ( isPaused || reducedMotion.matches || slides.length < 2 || document.hidden ) return;
+            if ( reducedMotion.matches || slides.length < 2 || document.hidden ) return;
             carousel.classList.add( 'is-playing' );
             timer = window.setInterval( () => displaySlide( activeIndex + 1 ), intervalMs );
         };
 
-        const updateToggle = () => {
-            if (!toggle) return;
-            toggle.setAttribute( 'aria-pressed', String( isPaused ) );
-            toggle.setAttribute( 'aria-label', isPaused ? 'Lanjutkan slideshow' : 'Jeda slideshow' );
-            toggle.innerHTML = `<i class="bi ${ isPaused ? 'bi-play-fill' : 'bi-pause-fill' }" aria-hidden="true"></i><span>${ isPaused ? 'Lanjutkan' : 'Jeda' }</span>`;
-        };
-
         slides.forEach( ( slide, index ) => { slide.inert = index !== activeIndex; } );
-        carousel.querySelector( '[data-hero-prev]' )?.addEventListener( 'click', () => displaySlide( activeIndex - 1 ) );
-        carousel.querySelector( '[data-hero-next]' )?.addEventListener( 'click', () => displaySlide( activeIndex + 1 ) );
         dots.forEach( ( dot ) => dot.addEventListener( 'click', () => displaySlide( Number( dot.dataset.heroDot ) ) ) );
-        toggle?.addEventListener( 'click', () => {
-            isPaused = !isPaused;
-            updateToggle();
-            syncTimer();
+        carousel.addEventListener( 'click', ( event ) => {
+            const target = event.target;
+            if ( !( target instanceof Element ) || target.closest( 'a, button, input, select, textarea, summary, [role="button"]' ) ) return;
+            const bounds = carousel.getBoundingClientRect();
+            const clickedLeftSide = event.clientX < bounds.left + bounds.width / 2;
+            displaySlide( activeIndex + ( clickedLeftSide ? -1 : 1 ) );
+        } );
+        carousel.addEventListener( 'keydown', ( event ) => {
+            if ( event.target !== carousel ) return;
+            if ( event.key === 'ArrowLeft' ) {
+                event.preventDefault();
+                displaySlide( activeIndex - 1 );
+            } else if ( event.key === 'ArrowRight' ) {
+                event.preventDefault();
+                displaySlide( activeIndex + 1 );
+            }
         } );
         document.addEventListener( 'visibilitychange', syncTimer );
         reducedMotion.addEventListener?.( 'change', syncTimer );
-        updateToggle();
         syncTimer();
     }
 
@@ -219,12 +225,12 @@ document.addEventListener( 'DOMContentLoaded', () => {
         menu.addEventListener( 'pointerenter', ( event ) => {
             if ( event.pointerType === 'mouse' ) menu.open = true;
         } );
-        menu.addEventListener( 'pointerleave', ( event ) => {
-            if ( event.pointerType === 'mouse' ) menu.open = false;
-        } );
         summary.addEventListener( 'click', ( event ) => {
             if ( event.detail > 0 && window.matchMedia( '(hover:hover) and (pointer:fine)' ).matches && menu.matches( ':hover' ) ) {
                 event.preventDefault();
+                // Pointer entry already opens the menu. Keep it open on click so
+                // the click that follows a hover cannot immediately hide it.
+                // Users can dismiss it with Escape or by clicking elsewhere.
                 menu.open = true;
             }
         } );
@@ -251,9 +257,16 @@ document.addEventListener( 'DOMContentLoaded', () => {
         if ( event.target.closest( 'a' ) && window.matchMedia( '(max-width: 1050px)' ).matches ) setOpen( false );
     } );
     document.addEventListener( 'keydown', ( event ) => {
-        if ( event.key === 'Escape' && navigation.classList.contains( 'open' ) ) setOpen( false );
+        if ( event.key !== 'Escape' ) return;
+        navigation.querySelectorAll( '.nav-dropdown[open]' ).forEach( ( menu ) => { menu.open = false; } );
+        if ( navigation.classList.contains( 'open' ) ) setOpen( false );
     } );
     document.addEventListener( 'click', ( event ) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const clickedMenu = target?.closest( '.nav-dropdown' ) || null;
+        navigation.querySelectorAll( '.nav-dropdown[open]' ).forEach( ( menu ) => {
+            if ( menu !== clickedMenu ) menu.open = false;
+        } );
         if ( navigation.classList.contains( 'open' ) && !navigation.contains( event.target ) && !button.contains( event.target ) ) setOpen( false );
     } );
     window.addEventListener( 'resize', () => {

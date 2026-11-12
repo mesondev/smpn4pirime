@@ -81,7 +81,7 @@ require __DIR__ . '/_header.php';
                 </div>
             </div>
 
-            <form id="formulir" class="public-form admission-form" action="proses_ppdb.php" method="post">
+            <form id="formulir" class="public-form admission-form" action="proses_ppdb.php" method="post" data-confirm-submit="Pastikan nama dan kontak sudah benar. Kirim permohonan pendaftaran sekarang?">
                 <h2>Formulir permohonan</h2>
                 <p>Data ini digunakan petugas untuk menindaklanjuti pendaftaran. Berkas asli diserahkan melalui prosedur yang ditetapkan sekolah.</p>
                 <input type="hidden" name="_csrf" value="<?= e(csrf_token()) ?>">
