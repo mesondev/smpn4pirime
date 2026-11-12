@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_login();
+require_once __DIR__ . '/config/database.php';
 require_module_access('pesan_masuk');
 require_once __DIR__ . '/includes/contact_mail.php';
 

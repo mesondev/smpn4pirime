@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/includes/helpers.php';
-require_once __DIR__ . '/config/database.php';
 require_login();
+require_once __DIR__ . '/config/database.php';
 require_module_access('absensi', true);
 
 $classes = $pdo->query("SELECT k.id,CONCAT(k.nama_kelas,' · ',ta.nama) AS label FROM kelas k JOIN tahun_ajaran ta ON ta.id=k.tahun_ajaran_id ORDER BY ta.nama DESC,k.tingkat,k.nama_kelas")->fetchAll(PDO::FETCH_KEY_PAIR);

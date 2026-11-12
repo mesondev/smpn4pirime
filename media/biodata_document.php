@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../config/database.php';
 require_login();
+require_once __DIR__ . '/../config/database.php';
 
 $viewerId = (int)($_SESSION['user_id'] ?? 0);
 $targetId = filter_input(INPUT_GET, 'user', FILTER_VALIDATE_INT) ?: 0;

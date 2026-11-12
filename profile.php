@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/includes/helpers.php';
-require_once __DIR__ . '/config/database.php';
 require_login();
+require_once __DIR__ . '/config/database.php';
 
 $userId = (int)$_SESSION['user_id'];
 $stmt = $pdo->prepare('SELECT id,username,nama_lengkap,role,created_at,password_hash,foto_path,password_must_change FROM users WHERE id=? AND aktif=1');

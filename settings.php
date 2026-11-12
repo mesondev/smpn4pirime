@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/helpers.php';
-require_once __DIR__ . '/config/database.php';
 require_login();
+require_once __DIR__ . '/config/database.php';
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 $preferences = user_display_preferences($pdo, $userId);

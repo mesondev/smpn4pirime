@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/helpers.php';
-require_once __DIR__ . '/config/database.php';
 require_login();
+require_once __DIR__ . '/config/database.php';
 require_module_access('moderasi_konten');
 
 $workflowReady = (int)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='konten_review_log'")->fetchColumn() === 1;

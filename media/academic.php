@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 require_once dirname(__DIR__) . '/includes/helpers.php';
-require_once dirname(__DIR__) . '/config/database.php';
 require_login();
+require_once dirname(__DIR__) . '/config/database.php';
 if (!in_array(current_role(), ['admin', 'guru', 'siswa'], true)) {
     http_response_code(403);
     exit('Akses ditolak.');

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/includes/helpers.php';
-require_once __DIR__ . '/config/database.php';
 require_login();
+require_once __DIR__ . '/config/database.php';
 require_module_access('log_aktivitas');
 if (!db_has_column($pdo, 'audit_logs', 'old_data')) {
     http_response_code(503);
