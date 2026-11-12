@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/helpers.php';
-require_once __DIR__ . '/../config/database.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_once __DIR__ . '/../config/database.php';
     verify_csrf();
     $lockedUntil = (int)($_SESSION['login_locked_until'] ?? 0);
     if ($lockedUntil > time()) {

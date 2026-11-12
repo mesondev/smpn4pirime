@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/includes/helpers.php';
-require_once __DIR__ . '/config/database.php';
 require_login();
+require_once __DIR__ . '/config/database.php';
 // Student accounts use the dedicated, student-scoped portal for every entry URL.
 // A stale `?module=...` query must not leave them on the generic dashboard.
 if (current_role() === 'siswa' && (string)($_GET['module'] ?? '') !== 'notifikasi') redirect('student.php');
